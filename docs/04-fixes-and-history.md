@@ -96,6 +96,21 @@
   - `node --test test\qn-manager.test.js`
   - `node --test test\pdd-bridge-runtime.test.js test\launch-error.test.js`
 
+## 修复 10：2026-06-30 PDD 客户端残缺目录与空解压缓存
+- **问题**：启动 `PddWorkbench.exe` 时连续弹系统错误，提示找不到 `zlib1.dll`、`LIBEAY32.dll`、`SSLEAY32.dll`。
+- **根因**：
+  - Git 干净历史不再保存完整 `pdd-workbench/` 客户端目录，本机残留的项目内 `pdd-workbench/` 只有 exe 和部分文件，缺 PDD 自带运行 DLL。
+  - 本地版本缓存里已有 `pdd-workbench-3.5.7.16.zip`，但 `extracted/` 是空目录；旧版本管理逻辑只判断 `extracted/` 是否存在，空目录也会被误认为可用。
+- **处理**：
+  - 已将本地缓存包 `pdd-workbench-3.5.7.16.zip` 解压到 `%LOCALAPPDATA%\pdd-fuke\workbenches\pdd\3.5.7.16\extracted`，并确认 `PddWorkbench.exe`、`zlib1.dll`、`libeay32.dll`、`ssleay32.dll` 存在。
+  - `PddManager.resolveExePath()` 只接受包含必要运行 DLL 的 PDD 目录；项目内残缺 `pdd-workbench/` 会被跳过。
+  - `oss-version-manager` 只有在解压目录里存在平台对应 exe 时，才认为本地版本可用，避免空 `extracted/` 阻止重新解压/下载。
+- **验证**：
+  - `node --test test\launch-error.test.js test\test-pdd-manager.js test\oss-version-manager.test.js test\launch-settings-store.test.js test\pdd-bridge-runtime.test.js test\qn-manager.test.js`
+  - `node --check main\pdd-manager.js`
+  - `node --check main\oss-version-manager.js`
+  - `node --check main\index.js`
+
 ## 当前待解决
 - DLL 注入后 WebSocket 连接正常，但消息 Hook 未触发
 - 初步分析可能是 DLL 的 C++ 函数地址与 PDD 3.5.7.16 实际二进制不完全匹配

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { PddManager, selectLayerSurveyTargets } = require('../main/pdd-manager');
+const { PddManager, isPddWorkbenchRuntimeComplete, selectLayerSurveyTargets } = require('../main/pdd-manager');
 
 const WORKBENCH_EXE = 'C:\\Users\\26799\\Desktop\\pdd-fuke\\pdd-workbench\\PddWorkbench.exe';
 const DEFAULT_DLL = path.join(__dirname, '..', 'assets', 'inject', 'PddExtend-3.5.7.16.dll');
@@ -297,7 +297,12 @@ test('pdd manager records helper launch errors without leaving PDD marked runnin
 });
 
 test('pdd manager sends helper launch_platform parameters with bridge URLs', async () => {
-  const exePath = WORKBENCH_EXE;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdd-launch-'));
+  const exePath = path.join(tempDir, 'PddWorkbench.exe');
+  fs.writeFileSync(exePath, '');
+  for (const dllName of ['zlib1.dll', 'libeay32.dll', 'ssleay32.dll']) {
+    fs.writeFileSync(path.join(tempDir, dllName), '');
+  }
   const calls = [];
   const originalExistsSync = fs.existsSync;
   fs.existsSync = (candidate) => candidate === exePath || originalExistsSync(candidate);
@@ -325,11 +330,17 @@ test('pdd manager sends helper launch_platform parameters with bridge URLs', asy
     }]);
   } finally {
     fs.existsSync = originalExistsSync;
+    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
 
 test('pdd manager uses configured DLL path for helper launch', async () => {
-  const exePath = WORKBENCH_EXE;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdd-launch-'));
+  const exePath = path.join(tempDir, 'PddWorkbench.exe');
+  fs.writeFileSync(exePath, '');
+  for (const dllName of ['zlib1.dll', 'libeay32.dll', 'ssleay32.dll']) {
+    fs.writeFileSync(path.join(tempDir, dllName), '');
+  }
   const configuredDllPath = 'C:\\custom\\PddExtend.dll';
   const calls = [];
   const originalExistsSync = fs.existsSync;
@@ -350,6 +361,7 @@ test('pdd manager uses configured DLL path for helper launch', async () => {
     assert.equal(calls[1][1].inject_dllpath, configuredDllPath);
   } finally {
     fs.existsSync = originalExistsSync;
+    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
 
@@ -443,21 +455,42 @@ test('pdd manager reports helper permission launch errors', async () => {
   }
 });
 
-test('pdd manager resolves the bundled pdd-workbench executable by default', async () => {
-  const originalExistsSync = fs.existsSync;
+test('pdd manager skips incomplete bundled pdd-workbench executable by default', async () => {
   const originalEnv = process.env.PDD_WORKBENCH_EXE;
+  const originalLocalAppData = process.env.LOCALAPPDATA;
+  const tempLocalAppData = fs.mkdtempSync(path.join(os.tmpdir(), 'pdd-localappdata-'));
   delete process.env.PDD_WORKBENCH_EXE;
-  fs.existsSync = (candidate) => candidate === WORKBENCH_EXE || originalExistsSync(candidate);
+  process.env.LOCALAPPDATA = tempLocalAppData;
 
   try {
     const manager = new PddManager();
 
-    assert.equal(await manager.resolveExePath(), WORKBENCH_EXE);
-    assert.equal(manager.status.exePath, WORKBENCH_EXE);
+    assert.equal(await manager.resolveExePath(), '');
+    assert.equal(manager.status.exePath, '');
   } finally {
-    fs.existsSync = originalExistsSync;
     if (originalEnv === undefined) delete process.env.PDD_WORKBENCH_EXE;
     else process.env.PDD_WORKBENCH_EXE = originalEnv;
+    if (originalLocalAppData === undefined) delete process.env.LOCALAPPDATA;
+    else process.env.LOCALAPPDATA = originalLocalAppData;
+    fs.rmSync(tempLocalAppData, { recursive: true, force: true });
+  }
+});
+
+test('pdd workbench runtime is incomplete when required dlls are missing', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdd-runtime-'));
+  const exePath = path.join(tempDir, 'PddWorkbench.exe');
+  fs.writeFileSync(exePath, '');
+
+  try {
+    assert.equal(isPddWorkbenchRuntimeComplete(exePath), false);
+
+    for (const dllName of ['zlib1.dll', 'libeay32.dll', 'ssleay32.dll']) {
+      fs.writeFileSync(path.join(tempDir, dllName), '');
+    }
+
+    assert.equal(isPddWorkbenchRuntimeComplete(exePath), true);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
 

@@ -27,6 +27,7 @@ const DEFAULT_CDP_CONNECT_DELAY_MS = 5000;
 const DEFAULT_CDP_RETRY_DELAY_MS = 2000;
 const DEFAULT_CDP_MAX_ATTEMPTS = 12;
 const DEFAULT_LAYER_SURVEY_POLL_MS = 1200;
+const REQUIRED_PDD_RUNTIME_DLLS = ['zlib1.dll', 'libeay32.dll', 'ssleay32.dll'];
 const noopLogger = { log() {}, error() {} };
 
 function resolveDefaultHelperPath(options = {}) {
@@ -37,6 +38,12 @@ function resolveDefaultHelperPath(options = {}) {
   if (process.env.PDD_FUKE_USE_OWN_HELPER === '1' || process.env.PDD_LG_USE_OWN_HELPER === '1') return path.join(__dirname, 'own-helper.js');
   if (fs.existsSync(DEFAULT_CSHARP_HELPER_PATH)) return DEFAULT_CSHARP_HELPER_PATH;
   return DEFAULT_HELPER_PATH;
+}
+
+function isPddWorkbenchRuntimeComplete(exePath) {
+  if (!exePath || !fs.existsSync(exePath)) return false;
+  const exeDir = path.dirname(exePath);
+  return REQUIRED_PDD_RUNTIME_DLLS.every((dllName) => fs.existsSync(path.join(exeDir, dllName)));
 }
 
 class HelperClient extends EventEmitter {
@@ -314,7 +321,7 @@ class PddManager extends EventEmitter {
   }
 
   async resolveExePath() {
-    if (this.exePath && fs.existsSync(this.exePath)) return this.exePath;
+    if (isPddWorkbenchRuntimeComplete(this.exePath)) return this.exePath;
 
     const localAppData = process.env.LOCALAPPDATA || '';
     const candidates = [
@@ -337,7 +344,7 @@ class PddManager extends EventEmitter {
           .filter((d) => d.isDirectory());
         for (const ver of versions.reverse()) { // 最新版本优先
           const exePath = path.join(ossBase, ver.name, 'extracted', 'PddWorkbench.exe');
-          if (fs.existsSync(exePath)) {
+          if (isPddWorkbenchRuntimeComplete(exePath)) {
             this.exePath = exePath;
             this.status.exePath = exePath;
             return exePath;
@@ -346,13 +353,15 @@ class PddManager extends EventEmitter {
       } catch (_) {}
     }
 
-    const found = candidates.slice(1).find((candidate) => fs.existsSync(candidate));
+    const found = candidates.slice(1).find((candidate) => isPddWorkbenchRuntimeComplete(candidate));
     if (found) {
       this.exePath = found;
       this.status.exePath = found;
     }
 
-    return this.exePath;
+    this.exePath = '';
+    this.status.exePath = '';
+    return '';
   }
 
   async suppressPddUpdate(exePath) {
@@ -1392,6 +1401,7 @@ function assertTaskkillAllowed(result) {
 module.exports = {
   PddManager,
   HelperClient,
+  isPddWorkbenchRuntimeComplete,
   DEFAULT_ARGS,
   DEFAULT_INJECT_DIR,
   DEFAULT_HELPER_PATH,

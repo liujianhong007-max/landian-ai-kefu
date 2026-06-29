@@ -177,6 +177,22 @@ function getExtractedRoot(extractDir) {
   return extractDir;
 }
 
+function executableNameForPlatform(platform) {
+  const key = String(platform || '').toLowerCase();
+  if (key === 'pdd') return 'PddWorkbench.exe';
+  if (key === 'qn') return 'AliWorkbench.exe';
+  if (key === 'dy') return 'douyin.exe';
+  if (key === 'ks') return 'KwaiShop.exe';
+  if (key === 'jd') return 'JingMaiWorkbench.exe';
+  return '';
+}
+
+function hasExtractedExecutable(extractDir, platform) {
+  const executableName = executableNameForPlatform(platform);
+  const root = getExtractedRoot(extractDir);
+  return Boolean(executableName && root && fs.existsSync(path.join(root, executableName)));
+}
+
 // ============================================================
 // 版本清单管理
 // ============================================================
@@ -360,7 +376,7 @@ async function downloadAndVerify(options = {}) {
   const extractedDir = path.join(platformDir, 'extracted');
 
   // 如果已下载且校验通过，且已解压，直接返回
-  if (fs.existsSync(destPath) && fs.existsSync(extractedDir)) {
+  if (fs.existsSync(destPath) && hasExtractedExecutable(extractedDir, platform)) {
     try {
       const fileSha256 = await computeSha256(destPath);
       if (!sha256 || fileSha256 === sha256) {
@@ -725,6 +741,7 @@ module.exports = {
   downloadAndVerify,
   extractZip,
   getExtractedRoot,
+  hasExtractedExecutable,
   getPlatformVersions,
   getLocalVersions,
   computeSha256,
