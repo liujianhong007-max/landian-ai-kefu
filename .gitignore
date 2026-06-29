@@ -27,6 +27,7 @@ tools/*/obj/
 # Local config (sensitive)
 config/ai-settings.local.json
 config/agent-config-cache.json
+config/launch-settings.local.json
 .env
 .env.local
 

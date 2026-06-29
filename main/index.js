@@ -12,6 +12,7 @@ const { createFileLogger } = require('./logger');
 const { WbChatWatcher } = require('./wbchat-watcher');
 const { createDiagnosticsSnapshot } = require('./diagnostics-snapshot');
 const { readAiSettings, saveAiSettings } = require('./ai-settings-store');
+const { readLaunchSettings } = require('./launch-settings-store');
 const { readCache: readAgentConfigCache, writeCache: writeAgentConfigCache } = require('./agent-config-cache');
 const chatHandlers = require('./chat-handlers');
 const observers = require('./pdd-observers');
@@ -685,12 +686,23 @@ async function startServices() {
     logger.log('[oss:init-error]', err.message);
   });
   wsServer = new InternalWebSocketServer({ host: '127.0.0.1', port: Number(process.env.PDD_LG_PORT || 0), logger });
+  const launchSettings = readLaunchSettings();
   pddManager = new PddManager({
+    exePath: launchSettings.pdd.exePath,
+    helperPath: launchSettings.pdd.helperPath,
+    dllPath: launchSettings.pdd.dllPath,
     logger,
     cdpManager: createCdpManager({ logger }),
     layerSurveyEnabled: true
   });
-  qnManager = new QnManager({ logger });
+  qnManager = new QnManager({
+    exePath: launchSettings.qn.exePath,
+    helperPath: launchSettings.qn.helperPath,
+    dllPath: launchSettings.qn.dllPath,
+    injectMode: launchSettings.qn.injectMode,
+    launchCooldownMs: launchSettings.qn.launchCooldownMs,
+    logger
+  });
 
   wsServer.on('listening', (address) => {
     logger.log('[ws:listening]', address);
@@ -775,7 +787,7 @@ async function startServices() {
   wbChatWatcher.start();
 
   const address = await wsServer.start();
-  bridgeServer = await bridgeRuntime.startPddBridgeServer({ wsPort: address.port, logger });
+  bridgeServer = await bridgeRuntime.startPddBridgeServer({ wsPort: address.port, qnBridgeMode: launchSettings.qnBridge, logger });
   observers.noteBridgeHttpStarted(bridgeObservationState, {
     httpStarted: true,
     url: bridgeServer.url,

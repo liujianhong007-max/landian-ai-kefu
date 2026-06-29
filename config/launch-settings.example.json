@@ -1,0 +1,15 @@
+{
+  "pdd": {
+    "exePath": "",
+    "helperPath": "",
+    "dllPath": ""
+  },
+  "qn": {
+    "exePath": "",
+    "helperPath": "",
+    "dllPath": "",
+    "injectMode": "",
+    "launchCooldownMs": 60000
+  },
+  "qnBridge": "fuke"
+}

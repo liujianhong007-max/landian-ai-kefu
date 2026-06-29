@@ -123,6 +123,35 @@ test('qn manager launches AliWorkbench through helper with QnExtend parameters',
   }
 });
 
+test('qn manager passes configured inject mode to helper launch', async () => {
+  const calls = [];
+  const exePath = 'C:\\Users\\26799\\AppData\\Local\\huihui\\qn\\9.63.20\\AliWorkbench.exe';
+  const helperClient = {
+    async executeShell(command) {
+      calls.push(['executeShell', command]);
+      return { output: '' };
+    },
+    async launchPlatform(param) {
+      calls.push(['launchPlatform', param]);
+      return { pid: 4321 };
+    }
+  };
+  const manager = new QnManager({
+    exePath,
+    helperClient,
+    wsPort: 4567,
+    jsUrl: 'http://127.0.0.1:3000/pdd-bridge.js',
+    processFinder: async () => [],
+    launchCooldownMs: 0,
+    injectMode: 'thread-context-w'
+  });
+
+  await manager.launch();
+
+  const launchCall = calls.find((call) => call[0] === 'launchPlatform');
+  assert.equal(launchCall[1].inject_mode, 'thread-context-w');
+});
+
 test('qn manager refreshes AliWorkbench process status', async () => {
   const manager = new QnManager({
     processFinder: async () => [{

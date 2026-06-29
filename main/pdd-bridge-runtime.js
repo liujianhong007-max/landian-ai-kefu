@@ -1770,8 +1770,8 @@ function createPddBridgeScript(wsPort) {
 })();`;
 }
 
-function readQnBridgeScript() {
-  const bridgeMode = String(process.env.PDD_FUKE_QN_BRIDGE || process.env.PDD_LG_QN_BRIDGE || 'fuke').trim().toLowerCase();
+function readQnBridgeScript(bridgeModeOption) {
+  const bridgeMode = String(bridgeModeOption || process.env.PDD_FUKE_QN_BRIDGE || process.env.PDD_LG_QN_BRIDGE || 'fuke').trim().toLowerCase();
   const scriptPath = bridgeMode === 'lite'
     ? path.join(__dirname, '..', 'bridges', 'qn-bridge-lite.js')
     : path.join(__dirname, '..', 'bridges', 'fuke-qn-hh-4.3.js');
@@ -1782,8 +1782,8 @@ function readQnBridgeScript() {
   }
 }
 
-async function startPddBridgeServer({ wsPort, host = '127.0.0.1', port = 0, logger: serverLogger = noopLogger } = {}) {
-  const qnScript = readQnBridgeScript();
+async function startPddBridgeServer({ wsPort, host = '127.0.0.1', port = 0, qnBridgeMode = '', logger: serverLogger = noopLogger } = {}) {
+  const qnScript = readQnBridgeScript(qnBridgeMode);
 
   const server = http.createServer((request, response) => {
     const pathname = new URL(request.url, `http://${host}`).pathname;

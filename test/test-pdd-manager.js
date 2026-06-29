@@ -328,6 +328,31 @@ test('pdd manager sends helper launch_platform parameters with bridge URLs', asy
   }
 });
 
+test('pdd manager uses configured DLL path for helper launch', async () => {
+  const exePath = WORKBENCH_EXE;
+  const configuredDllPath = 'C:\\custom\\PddExtend.dll';
+  const calls = [];
+  const originalExistsSync = fs.existsSync;
+  fs.existsSync = (candidate) => candidate === exePath || originalExistsSync(candidate);
+
+  try {
+    const manager = new PddManager({
+      exePath,
+      dllPath: configuredDllPath,
+      wsPort: 4567,
+      jsUrl: 'http://127.0.0.1:3000/pdd-bridge.js',
+      helperClient: createHelperClient(calls)
+    });
+    manager.suppressPddUpdate = async () => null;
+
+    await manager.launch();
+
+    assert.equal(calls[1][1].inject_dllpath, configuredDllPath);
+  } finally {
+    fs.existsSync = originalExistsSync;
+  }
+});
+
 test('pdd manager logs taskkill errors and continues helper launch', async () => {
   const exePath = WORKBENCH_EXE;
   const calls = [];

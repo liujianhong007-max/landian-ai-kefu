@@ -43,6 +43,7 @@ class QnManager extends EventEmitter {
     this.logger = options.logger || noopLogger;
     this.wsPort = options.wsPort || null;
     this.jsUrl = options.jsUrl || process.env.JS_URL || '';
+    this.injectMode = options.injectMode || '';
     this.monitorTimer = null;
     this.launchCooldownMs = options.launchCooldownMs ?? Number(process.env.PDD_FUKE_QN_LAUNCH_COOLDOWN_MS || 60 * 1000);
     this.lastLaunchAt = 0;
@@ -158,8 +159,9 @@ class QnManager extends EventEmitter {
         js_url: this.jsUrl,
         js_data: String(this.wsPort ?? '')
       };
-      if (process.env.PDD_FUKE_INJECT_MODE || process.env.PDD_LG_INJECT_MODE) {
-        launchParam.inject_mode = process.env.PDD_FUKE_INJECT_MODE || process.env.PDD_LG_INJECT_MODE;
+      const injectMode = this.injectMode || process.env.PDD_FUKE_INJECT_MODE || process.env.PDD_LG_INJECT_MODE;
+      if (injectMode) {
+        launchParam.inject_mode = injectMode;
       }
       this.logger.log('[qn:launch-params]', launchParam);
       data = await this.helperClient.launchPlatform(launchParam);

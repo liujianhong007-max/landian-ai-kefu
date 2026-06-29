@@ -269,6 +269,7 @@ class PddManager extends EventEmitter {
   constructor(options = {}) {
     super();
     this.exePath = options.exePath || process.env.PDD_WORKBENCH_EXE || '';
+    this.dllPath = options.dllPath || '';
     this.args = options.args || DEFAULT_ARGS;
     this.dllInjector = options.dllInjector || dllInjector;
     this.cdpManager = options.cdpManager || cdpManager;
@@ -368,6 +369,7 @@ class PddManager extends EventEmitter {
    */
   resolveDllPath(exePath) {
     // 环境变量显式指定优先
+    if (this.dllPath) return this.dllPath;
     if (process.env.PDD_FUKE_DLL) return process.env.PDD_FUKE_DLL;
     if (process.env.PDD_LG_DLL) return process.env.PDD_LG_DLL;
 

@@ -83,6 +83,19 @@
   - 如果需要 PDD 客户端，走本地放置、版本管理下载或外部制品，不走 Git 源码仓库。
   - 后续开发应基于 `codex/clean-history`，不要从旧 `master` 的 4GB 历史继续派生。
 
+## 修复 9：2026-06-30 启动参数本地配置化
+- **背景**：当前可用版本恢复后，启动台仍有部分路径和开关散落在环境变量或代码默认值里，不利于后续换机器、换 helper 或切桥接模式。
+- **处理**：
+  - 新增 `config/launch-settings.local.json` 作为本机启动参数文件；该文件已加入 `.gitignore`，不会上传个人路径。
+  - 新增 `config/launch-settings.example.json` 作为可提交模板。
+  - 当前支持字段：`pdd.exePath`、`pdd.helperPath`、`pdd.dllPath`、`qn.exePath`、`qn.helperPath`、`qn.dllPath`、`qn.injectMode`、`qn.launchCooldownMs`、`qnBridge`。
+  - `qnBridge` 默认 `fuke`，只有明确写成 `lite` 时才切到 lite 桥接脚本。
+- **验证**：
+  - `node --test test\launch-settings-store.test.js`
+  - `node --test test\test-pdd-manager.js`
+  - `node --test test\qn-manager.test.js`
+  - `node --test test\pdd-bridge-runtime.test.js test\launch-error.test.js`
+
 ## 当前待解决
 - DLL 注入后 WebSocket 连接正常，但消息 Hook 未触发
 - 初步分析可能是 DLL 的 C++ 函数地址与 PDD 3.5.7.16 实际二进制不完全匹配

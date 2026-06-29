@@ -1,7 +1,19 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const http = require('node:http');
 
-const { looksLikePddShopName, pickBestPddShopName, createPddBridgeScript } = require('../main/pdd-bridge-runtime');
+const { looksLikePddShopName, pickBestPddShopName, createPddBridgeScript, startPddBridgeServer } = require('../main/pdd-bridge-runtime');
+
+function getText(url) {
+  return new Promise((resolve, reject) => {
+    http.get(url, (response) => {
+      let body = '';
+      response.setEncoding('utf8');
+      response.on('data', (chunk) => { body += chunk; });
+      response.on('end', () => resolve({ statusCode: response.statusCode, body }));
+    }).on('error', reject);
+  });
+}
 
 test('looksLikePddShopName filters technical and non-shop labels', () => {
   assert.equal(looksLikePddShopName('正版桌游店'), true);
@@ -31,4 +43,16 @@ test('createPddBridgeScript seeds websocket handshake with shop and csr query pa
   assert.match(script, /shopName = normalizeShopLabel\(user\?\..*\|\| user\?\.mall_name/);
   assert.match(script, /username/);
   assert.match(script, /cs_id/);
+});
+
+test('pdd bridge server can select QN lite bridge by option', async () => {
+  const server = await startPddBridgeServer({ wsPort: 4567, qnBridgeMode: 'lite' });
+  try {
+    const response = await getText(server.qnUrl);
+
+    assert.equal(response.statusCode, 200);
+    assert.match(response.body, /qn-bridge-lite/);
+  } finally {
+    await server.close();
+  }
 });
