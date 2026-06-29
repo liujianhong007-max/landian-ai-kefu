@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>版本管理 - 蓝光电商AI客服</title>
+  <link rel="stylesheet" href="./version-manager.css">
+</head>
+<body>
+  <div class="vm-shell">
+    <!-- 标题栏 -->
+    <div class="vm-titlebar">
+      <div class="vm-titlebar-left">
+        <span class="vm-logo">📦</span>
+        <strong>工作台版本管理</strong>
+        <span class="vm-subtitle">管理各平台工作台的版本下载与切换</span>
+      </div>
+      <div class="vm-titlebar-right">
+        <button id="btnRefreshManifest" class="vm-btn vm-btn-outline" title="从云端刷新版本清单">🔄 刷新清单</button>
+        <button id="btnCleanOld" class="vm-btn vm-btn-outline vm-btn-danger" title="清理非推荐版本">🗑 清理旧版</button>
+        <button id="btnClose" class="vm-btn vm-btn-ghost" title="关闭">✕</button>
+      </div>
+    </div>
+
+    <!-- 存储统计 -->
+    <div class="vm-storage-bar" id="storageStats">
+      <span>📁 本地存储：加载中...</span>
+    </div>
+
+    <!-- 平台 Tab -->
+    <div class="vm-tabs" id="platformTabs">
+      <button class="vm-tab active" data-platform="pdd">拼多多</button>
+      <button class="vm-tab" data-platform="qn">千牛</button>
+      <button class="vm-tab" data-platform="dy">抖音</button>
+      <button class="vm-tab" data-platform="ks">快手</button>
+      <button class="vm-tab" data-platform="jd">京东</button>
+    </div>
+
+    <!-- 版本列表 -->
+    <div class="vm-content" id="versionContent">
+      <div class="vm-loading">加载中...</div>
+    </div>
+
+    <!-- 下载/解压进度条 -->
+    <div class="vm-progress-bar" id="downloadProgress" style="display:none;">
+      <div class="vm-progress-info">
+        <span id="progressLabel">下载中...</span>
+        <div class="vm-progress-right">
+          <span id="progressSpeed" class="vm-progress-speed"></span>
+          <span id="progressEta" class="vm-progress-eta"></span>
+          <span id="progressPercent">0%</span>
+        </div>
+      </div>
+      <div class="vm-progress-track">
+        <div class="vm-progress-fill" id="progressFill" style="width:0%;">
+          <div class="vm-progress-pulse"></div>
+        </div>
+      </div>
+      <div class="vm-progress-phase" id="progressPhase">⏬ 下载中</div>
+    </div>
+  </div>
+
+  <script src="./version-manager.js"></script>
+</body>
+</html>

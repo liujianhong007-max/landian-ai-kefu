@@ -1,0 +1,34 @@
+{
+    "name": "pdd-fuke",
+    "version": "0.1.0",
+    "description": "Electron PDD customer service aggregation tool",
+    "main": "main/index.js",
+    "scripts": {
+        "start": "electron .",
+        "build:helper-csharp": "powershell -NoProfile -ExecutionPolicy Bypass -File helper-csharp/build.ps1",
+        "build:process-diagnostics": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/process-diagnostics/build.ps1",
+        "build:window-diagnostics": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/window-diagnostics/build.ps1",
+        "build:mouse-click": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/mouse-click/build.ps1",
+        "build:key-press": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/key-press/build.ps1",
+        "diagnose:processes": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"& './tools/process-diagnostics/bin/ProcessDiagnostics.exe'\"",
+        "diagnose:window": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"& './tools/window-diagnostics/bin/WindowDiagnostics.exe'\"",
+        "click:qn-send": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"& './tools/mouse-click/bin/MouseClick.exe' 796 773 '接待中心'\"",
+        "press:qn-enter": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"& './tools/key-press/bin/KeyPress.exe' '接待中心'\"",
+        "test": "node --test"
+    },
+    "keywords": [
+        "electron",
+        "pdd",
+        "customer-service"
+    ],
+    "author": "",
+    "license": "UNLICENSED",
+    "dependencies": {
+        "@msgpack/msgpack": "^3.1.3",
+        "electron": "^31.7.7",
+        "koffi": "^3.0.2",
+        "win32-api": "^26.1.2",
+        "win32-def": "^26.1.2",
+        "ws": "^8.18.0"
+    }
+}

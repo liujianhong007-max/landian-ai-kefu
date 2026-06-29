@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>客服助手</title>
+    <link rel="stylesheet" href="./floating.css">
+    <link rel="stylesheet" href="./style.css">
+  </head>
+  <body>
+    <div class="plugin-shell">
+      <header class="plugin-titlebar">
+        <div>
+          <strong>客服助手</strong>
+          <span id="pluginPlatform">拼多多</span>
+        </div>
+        <div class="plugin-window-actions">
+          <button id="pluginMinimize" type="button" aria-label="最小化">-</button>
+          <button id="pluginClose" type="button" aria-label="关闭">×</button>
+        </div>
+      </header>
+
+      <section class="plugin-status">
+        <div>
+          <span id="pluginConnectionDot" class="status-dot"></span>
+          <strong id="pluginConnection">等待平台启动</strong>
+        </div>
+        <span id="pluginCdp">CDP 未连接</span>
+      </section>
+
+      <section class="plugin-metrics">
+        <div><strong id="pluginPending">--</strong><span>待回复</span></div>
+        <div><strong id="pluginToday">0</strong><span>今日接待</span></div>
+        <div><strong id="pluginSent">0</strong><span>已发送</span></div>
+      </section>
+
+      <section class="plugin-section">
+        <div class="section-header">
+          <h2>会话列表</h2>
+          <span id="pluginLastTime">--</span>
+        </div>
+        <div class="plugin-context">
+          <span id="pluginModeHint" class="plugin-pill">AI 状态加载中</span>
+          <span id="pluginSelection" class="plugin-context-text">暂无会话</span>
+        </div>
+        <div class="plugin-tabs" role="tablist" aria-label="会话分类">
+          <button id="pluginTabPending" class="plugin-tab active" type="button">待回复</button>
+          <button id="pluginTabManual" class="plugin-tab" type="button">
+            待人工处理
+            <span id="pluginManualBadge" class="plugin-badge">0</span>
+          </button>
+        </div>
+        <div id="pluginMessages" class="plugin-messages">
+          <div id="pluginEmptyState" class="empty">暂无买家消息</div>
+        </div>
+      </section>
+
+      <section class="plugin-section">
+        <div class="section-header">
+          <h2>快捷功能</h2>
+          <span id="pluginAutoReply">AI 状态加载中</span>
+        </div>
+        <div class="quick-grid">
+          <button id="pluginPendingAction" type="button">查看待回复</button>
+          <button id="pluginManualAction" type="button">继续接待</button>
+        </div>
+      </section>
+
+      <section class="plugin-section diagnostics">
+        <div class="section-header">
+          <h2>诊断</h2>
+          <span id="pluginClients">0 client</span>
+        </div>
+        <div id="pluginEvents" class="plugin-events"></div>
+      </section>
+    </div>
+
+    <script src="./floating.js"></script>
+  </body>
+</html>

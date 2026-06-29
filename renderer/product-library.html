@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>商品库</title>
+    <link rel="stylesheet" href="./style.css">
+    <link rel="stylesheet" href="./product-library.css">
+  </head>
+  <body data-page="product-library">
+    <!-- ===== SaaS 后台布局：侧边栏 + 主区域 ===== -->
+    <div class="product-admin-shell">
+      <!-- 左侧导航 -->
+      <aside class="product-admin-sidebar">
+        <div class="product-admin-brand">
+          <div class="product-admin-brand-icon">P</div>
+          <div>
+            <strong>商品库</strong>
+            <span>Product Library</span>
+          </div>
+        </div>
+
+        <nav class="product-admin-nav">
+          <button class="product-admin-nav-item active" data-nav="all">
+            <span class="product-admin-nav-glyph">📦</span>
+            <span>全部商品</span>
+          </button>
+          <button class="product-admin-nav-item" data-nav="active">
+            <span class="product-admin-nav-glyph">✅</span>
+            <span>销售中</span>
+          </button>
+          <button class="product-admin-nav-item" data-nav="inactive">
+            <span class="product-admin-nav-glyph">⏸</span>
+            <span>已下架</span>
+          </button>
+          <button class="product-admin-nav-item" data-nav="deleted">
+            <span class="product-admin-nav-glyph">🗑</span>
+            <span>回收站</span>
+          </button>
+        </nav>
+
+        <!-- 店铺选择卡片 -->
+        <div class="product-admin-sidebar-card">
+          <div class="product-admin-sidebar-head">
+            <strong>当前店铺</strong>
+            <button id="clearProductShopRegistryButton" type="button" class="workspace-action danger" style="font-size:12px;padding:4px 10px;">清空</button>
+          </div>
+          <div class="settings-inline" style="grid-template-columns:1fr;">
+            <select id="productScopePlatformSelect" class="workspace-select">
+              <option value="pdd">拼多多</option>
+              <option value="qn">淘宝天猫</option>
+              <option value="douyin">抖店</option>
+              <option value="1688">1688</option>
+            </select>
+          </div>
+          <div class="settings-inline" style="grid-template-columns:1fr;">
+            <select id="productScopeRegistrySelect" class="workspace-select">
+              <option value="">请选择店铺</option>
+            </select>
+          </div>
+          <div class="product-admin-sidebar-actions">
+            <button id="loadProductsButton" type="button" class="workspace-action primary" style="flex:1;">进入商品库</button>
+          </div>
+        </div>
+
+        <!-- 快捷操作卡片 -->
+        <div class="product-admin-sidebar-card">
+          <div class="product-admin-sidebar-head">
+            <strong>快捷操作</strong>
+          </div>
+          <div class="product-admin-sidebar-actions" style="flex-direction:column;">
+            <button id="fetchProductsButton" type="button" class="workspace-action" style="width:100%;justify-content:flex-start;">📥 导入 CSV</button>
+            <button id="addProductButton" type="button" class="workspace-action" style="width:100%;justify-content:flex-start;">➕ 新增商品</button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 右侧主内容 -->
+      <main class="product-admin-main">
+        <!-- 顶部面包屑 + 统计 -->
+        <div class="product-admin-topbar">
+          <div class="product-admin-breadcrumbs">
+            <span>商品管理</span>
+            <span>/</span>
+            <strong id="productBreadcrumbTitle">全部商品</strong>
+          </div>
+          <div class="product-admin-topbar-meta" id="productLibrarySummary">
+            请先在左侧选择店铺
+          </div>
+        </div>
+
+        <!-- 搜索 & 过滤工具栏 -->
+        <div class="product-admin-toolbar">
+          <div class="product-admin-filters">
+            <div class="search-input-wrapper">
+              <span class="search-input-icon">🔍</span>
+              <input id="goodsSearchInput" type="search" class="workspace-input" placeholder="搜索商品名称 / ID...">
+            </div>
+            <input id="shopSearchInput" type="search" class="workspace-input" placeholder="筛选分类...">
+            <select id="productStatusFilterSelect" class="workspace-select">
+              <option value="">全部状态</option>
+              <option value="active">销售中</option>
+              <option value="inactive">已下架</option>
+              <option value="deleted">已删除</option>
+            </select>
+            <select id="productSortBySelect" class="workspace-select">
+              <option value="updated_at">最近更新</option>
+              <option value="created_at">创建时间</option>
+              <option value="price">价格</option>
+              <option value="stock">库存</option>
+            </select>
+            <select id="productSortOrderSelect" class="workspace-select">
+              <option value="desc">倒序</option>
+              <option value="asc">正序</option>
+            </select>
+          </div>
+          <div class="product-admin-actions">
+            <button id="refreshProductsButton" type="button" class="workspace-action">🔄 刷新</button>
+            <button id="uploadProductsButton" type="button" class="workspace-action">上传服务器</button>
+            <button id="taskProgressButton" type="button" class="workspace-action">🔧 重建搜索</button>
+          </div>
+        </div>
+
+        <!-- 批量操作栏（有选中时显示） -->
+        <div class="product-admin-batchbar" id="productBatchBar" style="display:none;">
+          <span id="productBatchCount">已选 0 项</span>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button id="selectAllProductsButton" type="button" class="workspace-action">全选</button>
+            <button id="batchDeleteButton" type="button" class="workspace-action danger">🗑 批量删除</button>
+          </div>
+        </div>
+
+        <!-- 数据表格区域 -->
+        <div class="product-admin-canvas">
+          <!-- 表头 -->
+          <div class="product-data-table">
+            <div class="product-table-header">
+              <div class="product-table-cell col-check">
+                <input type="checkbox" id="productTableHeaderCheck" title="全选/取消">
+              </div>
+              <div class="product-table-cell col-info">商品信息</div>
+              <div class="product-table-cell col-price">价格</div>
+              <div class="product-table-cell col-stock">库存</div>
+              <div class="product-table-cell col-category">分类</div>
+              <div class="product-table-cell col-status">状态</div>
+              <div class="product-table-cell col-sync">同步</div>
+              <div class="product-table-cell col-actions">操作</div>
+            </div>
+            <!-- 表格内容 -->
+            <div id="productLibraryGrid" class="product-table-body"></div>
+          </div>
+
+          <!-- 空状态 -->
+          <div id="productTableEmpty" class="empty-state" style="display:none;">
+            <div class="empty-state-icon">📭</div>
+            <div class="empty-state-title">暂无商品数据</div>
+            <div class="empty-state-desc">该店铺还没有商品，可以先导入 CSV 或手动新增</div>
+          </div>
+
+          <!-- 分页 -->
+          <div class="product-admin-pagination" id="productLibraryPagination">
+            <span>第 1 / 1 页</span>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- ===== 右侧商品详情抽屉 ===== -->
+    <aside class="product-detail-drawer" id="productDetailPanel">
+      <div class="product-detail-drawer-header">
+        <div>
+          <div class="panel-kicker">Product Detail</div>
+          <h3 id="productDrawerTitle">未选择商品</h3>
+        </div>
+        <div class="product-detail-drawer-actions">
+          <button id="saveProductButton" type="button" class="workspace-action primary">💾 保存</button>
+          <button id="resetProductButton" type="button" class="workspace-action">↩ 重置</button>
+          <button id="closeDetailDrawerButton" type="button" class="workspace-action" style="font-size:18px;padding:4px 10px;">✕</button>
+        </div>
+      </div>
+
+      <div class="product-detail-drawer-body">
+        <!-- 商品概览 / Product overview -->
+        <section class="product-detail-section">
+          <div class="product-section-title">商品概览 / Product overview</div>
+          <div id="productOverviewSummary" class="product-overview-summary"></div>
+        </section>
+
+        <!-- 基础信息 / Basic info -->
+        <section class="product-detail-section">
+          <div class="product-section-title">基础信息 / Basic info</div>
+          <label class="settings-field">
+            <span>商品ID</span>
+            <input id="productIdInput" type="text" class="workspace-input" placeholder="product_id">
+          </label>
+          <label class="settings-field">
+            <span>商品名称</span>
+            <input id="productNameInput" type="text" class="workspace-input" placeholder="商品名称">
+          </label>
+          <div class="settings-inline">
+            <label class="settings-field">
+              <span>分类</span>
+              <input id="productCategoryInput" type="text" class="workspace-input" placeholder="分类">
+            </label>
+            <label class="settings-field">
+              <span>来源</span>
+              <select id="productSourceSelect" class="workspace-select">
+                <option value="manual">手动</option>
+                <option value="batch_sync">批量同步</option>
+                <option value="import">导入</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <!-- 销售信息 / Sales -->
+        <section class="product-detail-section">
+          <div class="product-section-title">销售信息 / Sales</div>
+          <div class="settings-inline">
+            <label class="settings-field">
+              <span>价格 ¥</span>
+              <input id="productPriceInput" type="number" step="0.01" min="0" class="workspace-input" placeholder="0.00">
+            </label>
+            <label class="settings-field">
+              <span>库存</span>
+              <input id="productStockInput" type="number" step="1" min="0" class="workspace-input" placeholder="0">
+            </label>
+          </div>
+          <div class="settings-inline">
+            <label class="settings-field">
+              <span>状态</span>
+              <select id="productStatusSelect" class="workspace-select">
+                <option value="active">销售中</option>
+                <option value="inactive">已下架</option>
+                <option value="deleted">已删除</option>
+              </select>
+            </label>
+            <label class="settings-field">
+              <span>主图链接</span>
+              <input id="productImageUrlInput" type="text" class="workspace-input" placeholder="https://...">
+            </label>
+          </div>
+        </section>
+
+        <!-- 图片素材 / Media links -->
+        <section class="product-detail-section">
+          <div class="product-section-title">图片素材 / Media links</div>
+          <div id="productMediaLinks" class="product-link-list"></div>
+          <div id="productDetailLinks" class="product-link-list"></div>
+        </section>
+
+        <!-- SKU 汇总 / SKU summary -->
+        <section class="product-detail-section">
+          <div class="product-section-title">SKU 汇总 / SKU summary</div>
+          <div id="productSkuSummary" class="product-sku-summary"></div>
+        </section>
+
+        <!-- 扩展属性 -->
+        <section class="product-attributes-card">
+          <div class="product-attributes-header">
+            <span>🏷 扩展属性</span>
+            <button id="addAttributeRowButton" type="button" class="workspace-action">+ 添加</button>
+          </div>
+          <div id="productAttributesEditor" class="product-attributes-editor"></div>
+        </section>
+
+        <!-- 同步状态 -->
+        <section class="product-sync-card">
+          <div class="sync-item"><span>同步状态</span><strong id="productSyncStatusDisplay">--</strong></div>
+          <div class="sync-item"><span>同步错误</span><strong id="productSyncErrorDisplay">--</strong></div>
+          <div class="sync-item"><span>最近同步</span><strong id="productLastSyncAtDisplay">--</strong></div>
+        </section>
+      </div>
+
+      <div class="product-detail-drawer-footer">
+        <button id="rebuildProductSearchButton" type="button" class="workspace-action">🔧 重建搜索</button>
+        <button id="deleteProductButton" type="button" class="workspace-action danger">🗑 删除商品</button>
+      </div>
+    </aside>
+
+    <!-- 详情抽屉遮罩 -->
+    <div class="product-detail-overlay" id="productDetailOverlay"></div>
+
+    <!-- ===== CSV 导入弹窗 ===== -->
+    <div class="product-modal-overlay" id="productImportModal">
+      <div class="product-modal-card">
+        <div class="product-modal-header">
+          <div>
+            <div class="panel-kicker">CSV Import</div>
+            <h3>CSV 商品批量导入</h3>
+          </div>
+          <button id="closeProductImportButton" type="button" class="product-modal-close">✕</button>
+        </div>
+        <p class="product-modal-tip" id="productImportScopeLabel">当前店铺：未选择</p>
+        <input id="productCsvFileInput" type="file" class="visually-hidden" accept=".csv,text/csv">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+          <button id="chooseProductCsvButton" type="button" class="workspace-action">选择 CSV 文件</button>
+          <span id="productCsvFileName" style="color:var(--admin-muted);font-size:13px;">未选择文件</span>
+        </div>
+        <div style="margin-bottom:14px;">
+          <button id="runProductImportButton" type="button" class="workspace-action primary">开始导入</button>
+        </div>
+        <div id="productImportResult" class="product-import-result">请选择店铺和 CSV 文件。</div>
+      </div>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

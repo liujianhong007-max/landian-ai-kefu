@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 设置</title>
+    <link rel="stylesheet" href="./style.css">
+  </head>
+  <body data-page="ai-settings">
+    <div class="window-page-shell">
+      <header class="window-page-header">
+        <div>
+          <div class="panel-kicker">tmagent</div>
+          <h1>API设置与日志</h1>
+        </div>
+        <p>独立窗口维护 Base URL、商户信息、tenant_id、API Key 与请求预览。</p>
+      </header>
+
+      <section id="aiSettingsPane" class="workspace-pane active window-page-pane" data-pane="ai-settings">
+        <div class="settings-grid">
+          <section class="settings-card">
+            <header>
+              <h3>tmagent 调用设置</h3>
+              <p>这里保存自动回复真正使用的服务地址、租户信息和认证参数。</p>
+            </header>
+            <label class="setting-row"><input id="tmagentEnabledInput" type="checkbox" checked> 启用 tmagent</label>
+            <label class="settings-field">
+              <span>Base URL</span>
+              <input id="tmagentBaseUrlInput" class="workspace-input" type="text" placeholder="https://xingqiao.taluo.club">
+            </label>
+            <div class="settings-inline">
+              <label class="settings-field">
+                <span>商户名称 / merchant_name</span>
+                <input id="tmagentMerchantNameInput" class="workspace-input" type="text" placeholder="例如：疾风 AI 客服">
+              </label>
+              <label class="settings-field">
+                <span>租户 ID / tenant_id</span>
+                <input id="tmagentTenantIdInput" class="workspace-input" type="text" placeholder="例如：01d2b1-6abc-41d7-a41e-91501b794735">
+              </label>
+            </div>
+            <label class="settings-field">
+              <span>API Key</span>
+              <input id="tmagentApiKeyInput" class="workspace-input" type="text" placeholder="sk-...">
+            </label>
+          </section>
+
+          <section class="settings-card">
+            <header>
+              <h3>调用映射</h3>
+              <p>这里展示自动回复会带给 tmagent 的请求头、店铺字段和接口地址。</p>
+            </header>
+            <label class="settings-field">
+              <span>请求头 / request header</span>
+              <div id="tmagentHeaderPreview" class="test-reply-result">X-API-Key: 未设置</div>
+            </label>
+            <div class="settings-inline">
+              <label class="settings-field">
+                <span>店铺 ID / shop_id</span>
+                <input id="tmagentShopIdPreview" class="workspace-input" type="text" disabled>
+              </label>
+              <label class="settings-field">
+                <span>店铺名称 / shop_name</span>
+                <input id="tmagentShopNamePreview" class="workspace-input" type="text" disabled>
+              </label>
+            </div>
+            <label class="settings-field">
+              <span>请求地址 / endpoint</span>
+              <input id="tmagentEndpointPreview" class="workspace-input" type="text" disabled>
+            </label>
+            <section class="tmagent-diagnostic-summary" aria-label="tmagent config summary">
+              <div class="process-row">
+                <span>tmagent</span>
+                <strong id="tmagentEnabledSummary">--</strong>
+              </div>
+              <div class="process-row">
+                <span>Base URL</span>
+                <strong id="tmagentBaseUrlSummary">--</strong>
+              </div>
+              <div class="process-row">
+                <span>Merchant</span>
+                <strong id="tmagentMerchantNameSummary">--</strong>
+              </div>
+              <div class="process-row">
+                <span>Tenant ID</span>
+                <strong id="tmagentTenantIdSummary">--</strong>
+              </div>
+              <div class="process-row">
+                <span>API Key</span>
+                <strong id="tmagentApiKeySummary">--</strong>
+              </div>
+            </section>
+          </section>
+        </div>
+
+        <section class="settings-card full">
+          <header>
+            <h3>请求预览</h3>
+            <p>输入一条买家问题，直接预览发往 <code>/api/orchestrate/chat</code> 的 JSON。</p>
+          </header>
+          <div class="test-reply-layout">
+            <textarea id="testReplyInput" class="settings-textarea" rows="5" placeholder="输入一个买家问题，例如：这个今天能发吗？"></textarea>
+            <div class="test-reply-output">
+              <div class="test-reply-label">请求摘要</div>
+              <div id="testReplyOutput" class="test-reply-result">还没有生成请求预览。</div>
+            </div>
+          </div>
+          <label class="settings-field">
+            <span>Payload JSON</span>
+            <div id="tmagentPayloadPreview" class="test-reply-result"></div>
+          </label>
+        </section>
+
+        <div class="settings-actions settings-actions-sticky">
+          <button id="runTestReplyButton" type="button" class="workspace-action primary">刷新预览</button>
+          <button id="saveAiSettingsButton" type="button" class="workspace-action">保存设置</button>
+        </div>
+      </section>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

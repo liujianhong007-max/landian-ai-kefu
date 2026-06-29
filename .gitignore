@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+out/
+release/
+*.exe
+*.msi
+*.dmg
+
+# C# helper build artifacts
+helper-csharp/bin/
+helper-csharp/obj/
+helper-csharp/tmp/
+
+# Native helper build artifacts
+helper-native/build/
+helper-native/custom-dll/build/
+helper-native/vcpkg_installed/
+helper-native/.vcpkg-work/
+
+# Tools build artifacts
+tools/*/bin/
+tools/*/obj/
+
+# Local config (sensitive)
+config/ai-settings.local.json
+config/agent-config-cache.json
+.env
+.env.local
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+Thumbs.db
+.DS_Store
+Desktop.ini
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+
+# Backup files
+*.bak
+*.orig
+*.old
+
+# Runtime data
+.npm-cache/
+pdd-workbench/
+
+# Agent / AI artifacts
+.codebuddy/
+.agents/
+.codex/

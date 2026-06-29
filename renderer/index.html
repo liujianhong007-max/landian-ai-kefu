@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>客服启动台</title>
+    <link rel="stylesheet" href="./launcher.css">
+  </head>
+  <body>
+    <div class="launcher-shell">
+      <main class="launcher-main">
+        <!-- 顶部：logo + 标题 + 拖拽区 + 按钮 + 窗口控制 -->
+        <div class="titlebar">
+          <div class="titlebar-left">
+            <div class="titlebar-logo">客</div>
+            <div class="titlebar-copy">
+              <strong>蓝光电商AI客服</strong>
+              <span id="loginUserDisplay" class="login-user-display logged-out">未登录</span>
+            </div>
+          </div>
+          <div class="titlebar-drag-spacer"></div>
+          <div class="titlebar-actions">
+            <button id="openProductLibraryButton" type="button" class="titlebar-button primary">商品库</button>
+            <button id="openAiAgentConfigButton" type="button" class="titlebar-button primary">AI设置</button>
+            <button id="openVersionManagerButton" type="button" class="titlebar-button">版本管理</button>
+            <button id="openAiSettingsButton" type="button" class="titlebar-button">设置</button>
+            <div class="window-controls">
+              <button id="btnMinimize" type="button" class="window-control-btn minimize" title="最小化">—</button>
+              <button id="btnClose" type="button" class="window-control-btn close" title="关闭">✕</button>
+            </div>
+          </div>
+        </div>
+
+        <section class="platform-panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-kicker">工作台列表</div>
+              <h1>已登录店铺</h1>
+            </div>
+          </div>
+
+          <section id="platformList" class="platform-list" aria-label="平台列表">
+            <article class="platform-card" data-platform="taobao">
+              <button class="platform-caret" type="button" aria-label="展开千牛"></button>
+              <div class="platform-icon taobao">淘</div>
+              <div class="platform-info">
+                <div><strong>千牛</strong><span class="shop-count">0</span></div>
+                <div class="shop-list-wrapper"><div class="shop-list"></div></div>
+              </div>
+              <button class="platform-action" id="platformQnAction" type="button">启动千牛</button>
+            </article>
+
+            <article class="platform-card primary" data-platform="pdd">
+              <button class="platform-caret" type="button" aria-label="展开拼多多"></button>
+              <div class="platform-icon pdd">拼</div>
+              <div class="platform-info">
+                <div><strong>拼多多</strong><span class="shop-count">0</span></div>
+                <div class="shop-list-wrapper"><div class="shop-list"></div></div>
+              </div>
+              <button class="platform-action" id="platformPddAction" type="button">启动拼多多</button>
+            </article>
+
+            <article class="platform-card" data-platform="douyin">
+              <button class="platform-caret" type="button" aria-label="展开抖音"></button>
+              <div class="platform-icon douyin">抖</div>
+              <div class="platform-info">
+                <div><strong>抖音</strong><span class="shop-count">0</span></div>
+                <div class="shop-list-wrapper"><div class="shop-list"></div></div>
+              </div>
+              <button class="platform-action" type="button">启动抖音</button>
+            </article>
+          </section>
+        </section>
+
+        <!-- 底部版本+开机启动 -->
+        <div class="launcher-footer">
+          <span>V 4.4.100</span>
+          <label class="startup-toggle"><input type="checkbox"> 开机启动</label>
+        </div>
+      </main>
+    </div>
+
+    <!-- AI客服配置 模态框 -->
+    <div id="aiAgentConfigModal" class="ai-config-modal" style="display:none;">
+      <div class="ai-config-overlay"></div>
+      <div class="ai-config-dialog">
+        <div class="ai-config-header">
+          <div>
+            <h2>AI客服配置</h2>
+            <p>配置客服人设、LLM 参数、店铺话术与行为策略</p>
+          </div>
+          <button id="aiConfigCloseBtn" class="ai-config-close" type="button" aria-label="关闭">&times;</button>
+        </div>
+
+        <div class="ai-config-body">
+          <!-- Tab 导航 -->
+          <div class="ai-config-tabs">
+            <button class="ai-config-tab active" data-tab="basic">基础人设</button>
+            <button class="ai-config-tab" data-tab="advanced">高级配置</button>
+            <button class="ai-config-tab" data-tab="llm">LLM 参数</button>
+            <button class="ai-config-tab" data-tab="behavior">行为策略</button>
+            <button class="ai-config-tab" data-tab="handoff">转人工设置</button>
+          </div>
+
+          <!-- Tab: 基础人设 -->
+          <section class="ai-config-pane active" data-pane="basic">
+            <div class="ai-config-field">
+              <label>客服名称 <span class="field-hint">决定系统提示词中的称呼</span></label>
+              <input id="cfgSoulName" class="workspace-input" type="text" placeholder="例如：小慧">
+            </div>
+            <div class="ai-config-field">
+              <label>店铺事实 <span class="field-hint">店铺名、主营类目、发货地、售后政策等</span></label>
+              <textarea id="cfgShopFacts" class="ai-config-textarea" rows="3" placeholder="店铺名称：XX旗舰店&#10;主营类目：女装&#10;发货地：广州&#10;售后政策：7天无理由退换"></textarea>
+            </div>
+            <div class="ai-config-field">
+              <label>商品事实 <span class="field-hint">主要商品信息、特点等</span></label>
+              <textarea id="cfgProductFacts" class="ai-config-textarea" rows="3" placeholder="主营商品：连衣裙、衬衫&#10;价格区间：50-200元&#10;材质特点：纯棉、透气"></textarea>
+            </div>
+            <div class="ai-config-field">
+              <label>售前引导 <span class="field-hint">话术、流程、常见问答</span></label>
+              <textarea id="cfgPresaleGuidance" class="ai-config-textarea" rows="3" placeholder="欢迎语：亲，您好！请问有什么可以帮您？&#10;尺码推荐：请提供身高体重&#10;发货时效：48小时内发货"></textarea>
+            </div>
+            <div class="ai-config-field">
+              <label>售后口径 <span class="field-hint">退换货、退款、投诉处理方式</span></label>
+              <textarea id="cfgAftersalePolicy" class="ai-config-textarea" rows="3" placeholder="退换货：签收7天内可申请&#10;退款：收到退货后1-3个工作日处理&#10;投诉：优先安抚，记录反馈"></textarea>
+            </div>
+            <div class="ai-config-field">
+              <label>说话风格标签 <span class="field-hint">多个标签用逗号分隔</span></label>
+              <input id="cfgPersonalityTags" class="workspace-input" type="text" placeholder="热情, 专业, 有耐心">
+            </div>
+            <div class="ai-config-field">
+              <label>表达偏好标签 <span class="field-hint">多个标签用逗号分隔</span></label>
+              <input id="cfgExpressionTags" class="workspace-input" type="text" placeholder="多用表情, 简短回复">
+            </div>
+          </section>
+
+          <!-- Tab: 高级配置 -->
+          <section class="ai-config-pane" data-pane="advanced">
+            <div class="ai-config-field">
+              <label>边界要求 <span class="field-hint">哪些不能说、不能做</span></label>
+              <textarea id="cfgBoundaryRules" class="ai-config-textarea" rows="4" placeholder="不要编造订单信息&#10;不要承诺具体发货时间&#10;不要透露店铺成本价&#10;不要引导用户到其他平台交易"></textarea>
+            </div>
+            <div class="ai-config-field">
+              <label>推荐偏好 <span class="field-hint">商品推荐的策略和优先级</span></label>
+              <textarea id="cfgRecommendationPolicy" class="ai-config-textarea" rows="3" placeholder="优先推荐店铺爆款&#10;根据用户需求匹配商品&#10;推荐时附带优惠信息"></textarea>
+            </div>
+            <div class="ai-config-field">
+              <label>转人工触发词 <span class="field-hint">多个触发词用逗号分隔，命中后自动转人工</span></label>
+              <input id="cfgHandoffTriggers" class="workspace-input" type="text" placeholder="投诉, 人工客服, 退款, 差评">
+            </div>
+            <div class="ai-config-field">
+              <label>禁用话术 <span class="field-hint">绝对不能说的词语或句式，用逗号分隔</span></label>
+              <input id="cfgBlockedPhrases" class="workspace-input" type="text" placeholder="绝对, 保证, 100%">
+            </div>
+          </section>
+
+          <!-- Tab: LLM 参数 -->
+          <section class="ai-config-pane" data-pane="llm">
+            <div class="ai-config-field">
+              <label>Temperature <span class="field-hint">LLM 输出随机性，0.0-2.0，越高越随机</span></label>
+              <div class="ai-config-range-row">
+                <input id="cfgLlmTemperature" class="ai-config-range" type="range" min="0" max="2" step="0.1" value="0.7">
+                <span id="cfgLlmTemperatureVal" class="ai-config-range-val">0.7</span>
+              </div>
+            </div>
+            <div class="ai-config-field">
+              <label>Max Tokens <span class="field-hint">LLM 单次最大输出 token 数</span></label>
+              <input id="cfgLlmMaxTokens" class="workspace-input" type="number" min="1" max="4096" placeholder="800">
+            </div>
+          </section>
+
+          <!-- Tab: 行为策略 -->
+          <section class="ai-config-pane" data-pane="behavior">
+            <div class="ai-config-field">
+              <label>探索率 (Epsilon) <span class="field-hint">控制策略随机性，0.0-1.0</span></label>
+              <div class="ai-config-range-row">
+                <input id="cfgEpsilon" class="ai-config-range" type="range" min="0" max="1" step="0.05" value="0.2">
+                <span id="cfgEpsilonVal" class="ai-config-range-val">0.2</span>
+              </div>
+            </div>
+            <div class="ai-config-field">
+              <label>策略类型</label>
+              <select id="cfgStrategy" class="workspace-input">
+                <option value="plan_a">plan_a</option>
+                <option value="plan_b">plan_b</option>
+                <option value="plan_c">plan_c</option>
+              </select>
+            </div>
+            <div class="ai-config-field">
+              <label>上下文轮数 <span class="field-hint">对话上下文保留最大轮数</span></label>
+              <input id="cfgMaxContextTurns" class="workspace-input" type="number" min="1" max="100" placeholder="30">
+            </div>
+            <div class="ai-config-field">
+              <label>知识库检索条数 (Top-K) <span class="field-hint">知识库检索返回条数</span></label>
+              <input id="cfgTopK" class="workspace-input" type="number" min="1" max="50" placeholder="3">
+            </div>
+          </section>
+
+          <!-- Tab: 转人工设置 -->
+          <section class="ai-config-pane" data-pane="handoff">
+            <div class="ai-config-field">
+              <label>转人工方式 <span class="field-hint">AI 触发转人工时的处理方式</span></label>
+              <div class="ai-config-radio-group">
+                <label class="ai-config-radio">
+                  <input type="radio" name="cfgHandoffAction" value="transfer_conversation_2" checked>
+                  <span class="ai-config-radio-card">
+                    <span class="ai-config-radio-title">转接其他客服</span>
+                    <span class="ai-config-radio-desc">会话转移给售后专用账号处理</span>
+                  </span>
+                </label>
+                <label class="ai-config-radio">
+                  <input type="radio" name="cfgHandoffAction" value="human_takeover">
+                  <span class="ai-config-radio-card">
+                    <span class="ai-config-radio-title">当前账号接待</span>
+                    <span class="ai-config-radio-desc">AI 回复后静默，人工在当前会话直接回复</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- 预览区：当前 soul_prompt -->
+        <div class="ai-config-preview">
+          <div class="ai-config-preview-header">
+            <h3>系统提示词预览 (soul_prompt)</h3>
+            <span class="field-hint">根据 basic + advanced 自动合并构建</span>
+          </div>
+          <div id="cfgSoulPromptPreview" class="ai-config-preview-content">尚未加载配置</div>
+        </div>
+
+        <div class="ai-config-footer">
+          <div class="ai-config-status">
+            <span id="aiConfigStatus" class="ai-config-status-text"></span>
+          </div>
+          <div class="ai-config-actions">
+            <button id="aiConfigRefreshBtn" type="button" class="workspace-action">刷新配置</button>
+            <button id="aiConfigSaveBtn" type="button" class="workspace-action primary">保存配置</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="./launcher.js"></script>
+  </body>
+</html>

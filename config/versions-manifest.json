@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-29T00:00:00.000Z",
+  "description": "蓝光电商AI客服 - 平台工作台版本清单",
+  "platforms": {
+    "pdd": {
+      "recommendation": "3.5.7.16",
+      "packages": [
+        {
+          "version": "3.4.0.17",
+          "download_url": "https://tm.agent.taluo.club/download/pdd/pdd-workbench-3.4.0.17.zip",
+          "size": 305367512,
+          "sha256": "901df88f8d3d57bea7619376fd1fa8d31fcf6deabddf76ede4d3aaeae866529e",
+          "release_notes": "PDD 工作台 3.4.0.17",
+          "minHuihuiVersion": "",
+          "maxHuihuiVersion": ""
+        },
+        {
+          "version": "3.5.7.16",
+          "download_url": "https://tm.agent.taluo.club/download/pdd/pdd-workbench-3.5.7.16.zip",
+          "size": 416873069,
+          "sha256": "000cfdee60ebd6b2c8516b245be83b614c1fde8baf391fbf7fd6bc7b0c7a839d",
+          "release_notes": "PDD 工作台 3.5.7.16（推荐版本）",
+          "minHuihuiVersion": "",
+          "maxHuihuiVersion": ""
+        },
+        {
+          "version": "3.6.3.6",
+          "download_url": "https://tm.agent.taluo.club/download/pdd/pdd-workbench-3.6.3.6.zip",
+          "size": 393813850,
+          "sha256": "a5448568d8c8b63bbbde996b3ea63c9091b970a221d3c5820e6b34beb34900f8",
+          "release_notes": "PDD 工作台 3.6.3.6",
+          "minHuihuiVersion": "",
+          "maxHuihuiVersion": ""
+        }
+      ]
+    },
+    "qn": {
+      "recommendation": "9.63.20",
+      "packages": [
+        {
+          "version": "9.63.20",
+          "download_url": "https://tm.agent.taluo.club/download/qn/aliworkbench-9.63.20.zip",
+          "size": 289538413,
+          "sha256": "882ce6dcd8b8e12cc79db2d6db2984195b212d21b45b22645512e7be8d7b90d5",
+          "release_notes": "千牛工作台 9.63.20（推荐版本）",
+          "minHuihuiVersion": "",
+          "maxHuihuiVersion": ""
+        },
+        {
+          "version": "9.95.00",
+          "download_url": "https://tm.agent.taluo.club/download/qn/aliworkbench-9.95.00.zip",
+          "size": 284705508,
+          "sha256": "23a8eb8daf4d773b2d9cbf718d6afae0ff739c68d23e6f53a1103297819a0577",
+          "release_notes": "千牛工作台 9.95.00",
+          "minHuihuiVersion": "",
+          "maxHuihuiVersion": ""
+        }
+      ]
+    },
+    "dy": {
+      "recommendation": "1.1.06",
+      "packages": [
+        {
+          "version": "1.0.21",
+          "download_url": "https://tm.agent.taluo.club/download/dy/doudian-1.0.21.zip",
+          "size": 266092170,
+          "sha256": "de4edaa9d2a91210e2d42977b0e463798cf73244644985e607340006bb9e9462",
+          "release_notes": "抖店工作台 1.0.21",
+          "minHuihuiVersion": "",
+          "maxHuihuiVersion": ""
+        },
+        {
+          "version": "1.1.5",
+          "download_url": "https://tm.agent.taluo.club/download/dy/doudian-1.1.5.zip",
+          "size": 276098454,
+          "sha256": "69371a27c0a1a18c5972743706eb96d75a9d472a8e4045aa8dbb8982207d8eea",
+          "release_notes": "抖店工作台 1.1.5",
+          "minHuihuiVersion": "4.4.63",
+          "maxHuihuiVersion": ""
+        },
+        {
+          "version": "1.1.06",
+          "download_url": "https://tm.agent.taluo.club/download/dy/doudian-1.1.06.zip",
+          "size": 276387511,
+          "sha256": "654c238fa4648c7ab427d3e7d08964438d22a6a24da989cce4cf0c739c5a0e48",
+          "release_notes": "抖店工作台 1.1.06（推荐版本）",
+          "minHuihuiVersion": "4.4.72",
+          "maxHuihuiVersion": ""
+        },
+        {
+          "version": "1.1.7",
+          "download_url": "https://tm.agent.taluo.club/download/dy/doudian-1.1.7.zip",
+          "size": 276545138,
+          "sha256": "4c3b55f54430ef80c44e28490325900a7d14cbae46ac621478fb19ebaf065216",
+          "release_notes": "抖店工作台 1.1.7",
+          "minHuihuiVersion": "4.4.72",
+          "maxHuihuiVersion": ""
+        }
+      ]
+    },
+    "ks": {
+      "recommendation": "1.0.3",
+      "packages": [
+        {
+          "version": "1.0.3",
+          "download_url": "https://tm.agent.taluo.club/download/ks/kuaishou-1.0.3.zip",
+          "size": 106278128,
+          "sha256": "71022b45df68a104c645db702530461d7d7ff54c2dc4f369646b46ab39d766b3",
+          "release_notes": "快手商家工作台 1.0.3（推荐版本）",
+          "minHuihuiVersion": "",
+          "maxHuihuiVersion": ""
+        }
+      ]
+    },
+    "jd": {
+      "recommendation": "12.5.2",
+      "packages": [
+        {
+          "version": "12.5.2",
+          "download_url": "https://tm.agent.taluo.club/download/jd/jingmai-12.5.2.zip",
+          "size": 481415128,
+          "sha256": "13f5acecd2efa6f3a098dbee7b7155b8f760680d154147918c19ae90af3ce80a",
+          "release_notes": "京麦工作台 12.5.2（推荐版本）",
+          "minHuihuiVersion": "",
+          "maxHuihuiVersion": ""
+        },
+        {
+          "version": "13.0.0",
+          "download_url": "https://tm.agent.taluo.club/download/jd/jingmai-13.0.0.zip",
+          "size": 446112625,
+          "sha256": "af300de9f94c445fd25a5f9dea8b1544aa2a0391a10edca925a02db03487d1b3",
+          "release_notes": "京麦工作台 13.0.0",
+          "minHuihuiVersion": "",
+          "maxHuihuiVersion": ""
+        }
+      ]
+    }
+  }
+}

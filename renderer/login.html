@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - 蓝光电商AI客服</title>
+    <link rel="stylesheet" href="./login.css">
+  </head>
+  <body>
+    <div class="login-shell">
+      <div class="login-card">
+        <!-- 可拖拽区域：顶部标题栏 + 窗口控制 -->
+        <div class="login-drag-bar">
+          <div class="window-controls">
+            <button id="btnMinimize" type="button" class="window-dot minimize" title="最小化"></button>
+            <button id="btnClose" type="button" class="window-dot close" title="关闭"></button>
+          </div>
+        </div>
+        <div class="login-header">
+          <h1>蓝光电商AI客服</h1>
+          <p id="loginSubtitle">登录您的账号</p>
+        </div>
+
+        <form id="loginForm" class="login-form">
+          <label class="login-field">
+            <span>手机号</span>
+            <input id="phoneInput" class="login-input" type="text" placeholder="请输入手机号" maxlength="11" autocomplete="tel">
+          </label>
+
+          <label class="login-field">
+            <span>密码</span>
+            <input id="passwordInput" class="login-input" type="password" placeholder="请输入密码" autocomplete="current-password">
+          </label>
+
+          <label class="login-remember">
+            <input id="rememberCheckbox" type="checkbox">
+            <span class="remember-label">自动登录（7天内免输入）</span>
+          </label>
+
+          <div id="loginError" class="login-error" hidden></div>
+
+          <button id="loginButton" type="submit" class="login-button primary">登 录</button>
+        </form>
+
+        <div class="login-footer">
+          <span id="footerText">还没有账号？</span>
+          <button id="toggleModeButton" type="button" class="login-link">立即注册</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="./login.js"></script>
+  </body>
+</html>
