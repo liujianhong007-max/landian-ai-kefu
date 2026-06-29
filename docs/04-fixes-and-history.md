@@ -53,6 +53,36 @@
   - 平台名必须统一归一化，不能让 `publicplatform` / `pdd` 在不同模块里各自处理；
   - 每次改 bridge 功能，都要回归“二次注入 + 新买家消息 + 自动回复”这条链路。
 
+## 修复 8：2026-06-30 CodeBuddy 混乱恢复与干净 Git 历史
+- **背景**：CodeBuddy 连续改动后，项目出现半迁移状态，`lg` / `fuke` / `landian` 命名、helper 路径、DLL 路径、renderer DOM 兼容和 tmagent payload 契约混在一起；用户实测启动台可登录，但最初“启动拼多多”只能弹 helper，不能拉起 PDD 客户端。
+- **保留点**：
+  - 原救援分支：`codex/rescue-pdd-fuke-cleanup`
+  - 本地可用 tag：`rescue-working-2026-06-30`
+  - 救援提交：`b748e488 fix: restore pdd fuke launch and auto-reply flow`
+  - 干净远端分支：`origin/codex/clean-history`
+  - 干净历史根提交：`7d424b20 chore: create clean project history without workbench binaries`
+- **关键修复**：
+  - `main/pdd-manager.js` 默认 helper 恢复为 fuke/PddFukeHelper 路线，并兼容旧 `PDD_LG_*` 环境变量。
+  - `main/pdd-manager.js` 的 DLL 解析改为只把真实存在的 DLL 传给 helper；干净历史默认使用 `assets/inject/PddExtend-3.5.7.16.dll`，本地有 `pdd-workbench/PddExtend-3.5.7.16.dll` 时也可用。
+  - `main/logger.js` 日志目录恢复为 `%LOCALAPPDATA%/pdd-fuke/logs/main.log`。
+  - `main/own-helper.js` hello 握手恢复为 `platform: "fuke-helper"`、`version: "pdd-fuke-helper"`。
+  - `main/tmagent-client.js` 和 `main/chat-handlers.js` 恢复 tmagent chat payload、自动回复 flush 返回值、PDD send failure 诊断和 QN 切会话发送逻辑。
+  - `main/pdd-bridge-runtime.js` 统一为 `__pddFuke*` bridge 全局名，并保留 QN bridge 环境变量兼容。
+  - `renderer/app.js`、`renderer/launcher.js` 增加空 DOM 防护，恢复启动台状态渲染和店铺 AI 开关测试契约。
+  - `renderer/index.html`、`renderer/product-library.html`、`renderer/ai-settings.html` 恢复测试要求的关键中文文案。
+- **真实验证**：
+  - 用户确认：客户端能登录、能进工作台、点击启动拼多多能拉起 PDD 客户端、自动回复已工作。
+  - 自动化验证：`npm test` 通过，153 pass / 1 skip / 0 fail。
+- **Git 清理**：
+  - 旧历史包含完整 `pdd-workbench/`，`.git` pack 约 4.41 GiB，且存在 100MB+ 文件，例如 `pdd-workbench/pddbrowser104/chrome.dll`。
+  - 为避免 GitHub 拒绝大文件，创建 orphan 分支 `codex/clean-history`，只保留代码、配置、文档和小型 `assets/inject/*.dll`。
+  - `.gitignore` 已加入 `pdd-workbench/` 与 `helper-native/custom-dll/build/`。
+  - `codex/clean-history` 最大 tracked 文件约 1.21MB，已成功 push 到 GitHub。
+- **后续规则**：
+  - 不要再把完整客户端目录 `pdd-workbench/` 加回 Git。
+  - 如果需要 PDD 客户端，走本地放置、版本管理下载或外部制品，不走 Git 源码仓库。
+  - 后续开发应基于 `codex/clean-history`，不要从旧 `master` 的 4GB 历史继续派生。
+
 ## 当前待解决
 - DLL 注入后 WebSocket 连接正常，但消息 Hook 未触发
 - 初步分析可能是 DLL 的 C++ 函数地址与 PDD 3.5.7.16 实际二进制不完全匹配
