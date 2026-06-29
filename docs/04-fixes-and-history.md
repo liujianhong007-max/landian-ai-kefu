@@ -105,6 +105,7 @@
   - 已将本地缓存包 `pdd-workbench-3.5.7.16.zip` 解压到 `%LOCALAPPDATA%\pdd-fuke\workbenches\pdd\3.5.7.16\extracted`，并确认 `PddWorkbench.exe`、`zlib1.dll`、`libeay32.dll`、`ssleay32.dll` 存在。
   - `PddManager.resolveExePath()` 只接受包含必要运行 DLL 的 PDD 目录；项目内残缺 `pdd-workbench/` 会被跳过。
   - `oss-version-manager` 只有在解压目录里存在平台对应 exe 时，才认为本地版本可用，避免空 `extracted/` 阻止重新解压/下载。
+  - PDD 启动前增加本地运行 DLL 自检；如果配置的 `PddWorkbench.exe` 目录缺 `zlib1.dll`、`libeay32.dll` 或 `ssleay32.dll`，不会调用 helper，直接返回“PDD 客户端目录不完整，请使用版本管理重新下载”。
 - **验证**：
   - `node --test test\launch-error.test.js test\test-pdd-manager.js test\oss-version-manager.test.js test\launch-settings-store.test.js test\pdd-bridge-runtime.test.js test\qn-manager.test.js`
   - `node --check main\pdd-manager.js`

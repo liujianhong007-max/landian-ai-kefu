@@ -46,6 +46,22 @@ function isPddWorkbenchRuntimeComplete(exePath) {
   return REQUIRED_PDD_RUNTIME_DLLS.every((dllName) => fs.existsSync(path.join(exeDir, dllName)));
 }
 
+function getMissingPddRuntimeDlls(exePath) {
+  if (!exePath || !fs.existsSync(exePath)) return [];
+  const exeDir = path.dirname(exePath);
+  return REQUIRED_PDD_RUNTIME_DLLS.filter((dllName) => !fs.existsSync(path.join(exeDir, dllName)));
+}
+
+function createIncompletePddRuntimeError(exePath) {
+  const missingDlls = getMissingPddRuntimeDlls(exePath);
+  if (missingDlls.length === 0) return null;
+  const error = new Error(`PDD 客户端目录不完整，缺少 ${missingDlls.join(', ')}。请使用版本管理重新下载 PDD 客户端。`);
+  error.code = 'PDD_WORKBENCH_INCOMPLETE';
+  error.exePath = exePath;
+  error.missingDlls = missingDlls;
+  return error;
+}
+
 class HelperClient extends EventEmitter {
   constructor(options = {}) {
     super();
@@ -417,6 +433,16 @@ class PddManager extends EventEmitter {
 
   async launch() {
     this.logger.log('[pdd:launch]', { exePath: this.exePath, args: this.args });
+    const incompleteRuntimeError = createIncompletePddRuntimeError(this.exePath);
+    if (incompleteRuntimeError) {
+      this.status.running = false;
+      this.status.pid = null;
+      this.status.lastError = incompleteRuntimeError.message;
+      this.logger.error('[pdd:launch-error]', incompleteRuntimeError);
+      this.emit('error', incompleteRuntimeError);
+      throw incompleteRuntimeError;
+    }
+
     const exePath = await this.resolveExePath();
     if (!exePath || !fs.existsSync(exePath)) {
       const error = new Error('PddWorkbench.exe was not found. Set PDD_WORKBENCH_EXE to the installed executable path.');
@@ -1402,6 +1428,7 @@ module.exports = {
   PddManager,
   HelperClient,
   isPddWorkbenchRuntimeComplete,
+  getMissingPddRuntimeDlls,
   DEFAULT_ARGS,
   DEFAULT_INJECT_DIR,
   DEFAULT_HELPER_PATH,

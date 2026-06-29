@@ -26,6 +26,22 @@ function createHelperClient(calls, options = {}) {
   };
 }
 
+function createCompleteWorkbenchFixture(prefix = 'pdd-workbench-') {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const exePath = path.join(dir, 'PddWorkbench.exe');
+  fs.writeFileSync(exePath, '');
+  for (const dllName of ['zlib1.dll', 'libeay32.dll', 'ssleay32.dll']) {
+    fs.writeFileSync(path.join(dir, dllName), '');
+  }
+  return {
+    dir,
+    exePath,
+    cleanup() {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  };
+}
+
 function flushAsyncWork() {
   return new Promise((resolve) => setImmediate(resolve));
 }
@@ -82,7 +98,8 @@ test('pdd manager delegates DLL injection and CDP commands', async () => {
 });
 
 test('pdd manager launches through helper and schedules CDP after startup', async () => {
-  const exePath = WORKBENCH_EXE;
+  const workbench = createCompleteWorkbenchFixture();
+  const exePath = workbench.exePath;
   const calls = [];
   const originalExistsSync = fs.existsSync;
   const originalSetTimeout = global.setTimeout;
@@ -135,6 +152,7 @@ test('pdd manager launches through helper and schedules CDP after startup', asyn
     global.setTimeout = originalSetTimeout;
     if (originalDllEnv === undefined) delete process.env.PDD_FUKE_DLL;
     else process.env.PDD_FUKE_DLL = originalDllEnv;
+    workbench.cleanup();
   }
 });
 
@@ -270,7 +288,8 @@ test('pdd manager falls back to plain CDP connect when discovery is unavailable'
 });
 
 test('pdd manager records helper launch errors without leaving PDD marked running', async () => {
-  const exePath = WORKBENCH_EXE;
+  const workbench = createCompleteWorkbenchFixture();
+  const exePath = workbench.exePath;
   const originalExistsSync = fs.existsSync;
   fs.existsSync = (candidate) => candidate === exePath || originalExistsSync(candidate);
   const calls = [];
@@ -293,6 +312,7 @@ test('pdd manager records helper launch errors without leaving PDD marked runnin
     assert.equal(errors[0].message, launchFailure.message);
   } finally {
     fs.existsSync = originalExistsSync;
+    workbench.cleanup();
   }
 });
 
@@ -366,7 +386,8 @@ test('pdd manager uses configured DLL path for helper launch', async () => {
 });
 
 test('pdd manager logs taskkill errors and continues helper launch', async () => {
-  const exePath = WORKBENCH_EXE;
+  const workbench = createCompleteWorkbenchFixture();
+  const exePath = workbench.exePath;
   const calls = [];
   const messages = [];
   const originalExistsSync = fs.existsSync;
@@ -396,11 +417,13 @@ test('pdd manager logs taskkill errors and continues helper launch', async () =>
     assert.deepEqual(messages[0], ['[pdd:taskkill-error]', taskkillError]);
   } finally {
     fs.existsSync = originalExistsSync;
+    workbench.cleanup();
   }
 });
 
 test('pdd manager stops launch when taskkill is denied by Windows', async () => {
-  const exePath = WORKBENCH_EXE;
+  const workbench = createCompleteWorkbenchFixture();
+  const exePath = workbench.exePath;
   const calls = [];
   const originalExistsSync = fs.existsSync;
   fs.existsSync = (candidate) => candidate === exePath || originalExistsSync(candidate);
@@ -427,11 +450,13 @@ test('pdd manager stops launch when taskkill is denied by Windows', async () => 
     assert.equal(errors.length, 1);
   } finally {
     fs.existsSync = originalExistsSync;
+    workbench.cleanup();
   }
 });
 
 test('pdd manager reports helper permission launch errors', async () => {
-  const exePath = WORKBENCH_EXE;
+  const workbench = createCompleteWorkbenchFixture();
+  const exePath = workbench.exePath;
   const originalExistsSync = fs.existsSync;
   fs.existsSync = (candidate) => candidate === exePath || originalExistsSync(candidate);
   const accessError = Object.assign(new Error('spawn EACCES'), { code: 'EACCES' });
@@ -452,6 +477,7 @@ test('pdd manager reports helper permission launch errors', async () => {
     assert.equal(errors[0].code, 'EACCES');
   } finally {
     fs.existsSync = originalExistsSync;
+    workbench.cleanup();
   }
 });
 
@@ -494,11 +520,36 @@ test('pdd workbench runtime is incomplete when required dlls are missing', () =>
   }
 });
 
-test('pdd manager does not run update suppression during helper launch', async () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdd-manager-'));
+test('pdd manager rejects incomplete configured workbench before helper launch', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdd-runtime-'));
   const exePath = path.join(tempDir, 'PddWorkbench.exe');
-  const updatePath = path.join(tempDir, 'PDDUpdate.exe');
+  const originalLocalAppData = process.env.LOCALAPPDATA;
+  const tempLocalAppData = fs.mkdtempSync(path.join(os.tmpdir(), 'pdd-localappdata-'));
   fs.writeFileSync(exePath, '');
+  process.env.LOCALAPPDATA = tempLocalAppData;
+  const calls = [];
+  const manager = new PddManager({
+    exePath,
+    helperClient: createHelperClient(calls)
+  });
+
+  try {
+    await assert.rejects(() => manager.launch(), /PDD 客户端目录不完整.*zlib1\.dll.*libeay32\.dll.*ssleay32\.dll/);
+    assert.deepEqual(calls, []);
+    assert.match(manager.status.lastError, /PDD 客户端目录不完整/);
+  } finally {
+    if (originalLocalAppData === undefined) delete process.env.LOCALAPPDATA;
+    else process.env.LOCALAPPDATA = originalLocalAppData;
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    fs.rmSync(tempLocalAppData, { recursive: true, force: true });
+  }
+});
+
+test('pdd manager does not run update suppression during helper launch', async () => {
+  const workbench = createCompleteWorkbenchFixture('pdd-manager-');
+  const tempDir = workbench.dir;
+  const exePath = workbench.exePath;
+  const updatePath = path.join(tempDir, 'PDDUpdate.exe');
   fs.writeFileSync(updatePath, '');
   const messages = [];
 
@@ -517,7 +568,7 @@ test('pdd manager does not run update suppression during helper launch', async (
     assert.equal(fs.existsSync(updatePath), true);
     assert.equal(messages.some(([name]) => name === '[pdd:update-suppressed]'), false);
   } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    workbench.cleanup();
   }
 });
 
