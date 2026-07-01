@@ -4,13 +4,21 @@ const state = {
   clients: new Map(),
   conversations: new Map(),
   manualConversations: new Map(),
-  events: [],
+  tickets: {
+    reshipment: new Map(),
+    address: new Map(),
+    afterSale: new Map()
+  },
+  confirmedTickets: new Set(),
   activeConversationId: null,
-  activeTab: 'pending',
+  activeMainTab: 'assistant',
+  activeHandoffList: 'manual',
+  activeTicketCategory: 'reshipment',
   aiEnabled: false,
   aiMerchantName: '',
   today: 0,
   sent: 0,
+  pendingManualAfterCurrent: false,
   statuses: {
     pdd: null,
     qn: null
@@ -25,30 +33,46 @@ const els = {
   pending: document.getElementById('pluginPending'),
   today: document.getElementById('pluginToday'),
   sent: document.getElementById('pluginSent'),
-  messages: document.getElementById('pluginMessages'),
-  emptyState: document.getElementById('pluginEmptyState'),
+  assistantTab: document.getElementById('pluginAssistantTab'),
+  ticketTab: document.getElementById('pluginTicketTab'),
+  assistantPanel: document.getElementById('pluginAssistantPanel'),
+  ticketPanel: document.getElementById('pluginTicketPanel'),
+  manualMessages: document.getElementById('pluginManualMessages'),
+  pendingMessages: document.getElementById('pluginPendingMessages'),
+  ticketMessages: document.getElementById('pluginTicketMessages'),
   lastTime: document.getElementById('pluginLastTime'),
-  clients: document.getElementById('pluginClients'),
-  events: document.getElementById('pluginEvents'),
   autoReply: document.getElementById('pluginAutoReply'),
   modeHint: document.getElementById('pluginModeHint'),
   selection: document.getElementById('pluginSelection'),
   pendingAction: document.getElementById('pluginPendingAction'),
   manualAction: document.getElementById('pluginManualAction'),
-  tabPending: document.getElementById('pluginTabPending'),
-  tabManual: document.getElementById('pluginTabManual'),
+  manualListAction: document.getElementById('pluginManualListAction'),
+  pendingListAction: document.getElementById('pluginPendingListAction'),
+  ticketReshipmentAction: document.getElementById('pluginTicketReshipmentAction'),
+  ticketAddressAction: document.getElementById('pluginTicketAddressAction'),
+  ticketAfterSaleAction: document.getElementById('pluginTicketAfterSaleAction'),
+  currentConversation: document.getElementById('pluginCurrentConversation'),
   manualBadge: document.getElementById('pluginManualBadge'),
+  pendingHumanBadge: document.getElementById('pluginPendingHumanBadge'),
+  ticketReshipmentBadge: document.getElementById('pluginTicketReshipmentBadge'),
+  ticketAddressBadge: document.getElementById('pluginTicketAddressBadge'),
+  ticketAfterSaleBadge: document.getElementById('pluginTicketAfterSaleBadge'),
   close: document.getElementById('pluginClose'),
   minimize: document.getElementById('pluginMinimize')
 };
 
 function normalizePlatformName(platform) {
   if (platform === 'publicplatform') return 'pdd';
+  if (platform === 'qianniu') return 'qn';
   return platform || '';
 }
 
 function setText(el, value) {
   if (el) el.textContent = String(value);
+}
+
+function setDisabled(el, value) {
+  if (el) el.disabled = Boolean(value);
 }
 
 function timeLabel(value) {
@@ -60,11 +84,9 @@ function timeLabel(value) {
 }
 
 function waitLabel(value) {
-  if (!value) return '已回复';
-  const deltaMs = Math.max(0, Date.now() - Number(value));
-  const totalMinutes = Math.floor(deltaMs / 60000);
-  if (totalMinutes < 1) return '等待 1分钟内';
-  if (totalMinutes < 60) return `等待 ${totalMinutes}分钟`;
+  if (!value) return '等待中';
+  const totalMinutes = Math.max(1, Math.floor((Date.now() - Number(value)) / 60000));
+  if (totalMinutes < 60) return `等待 ${totalMinutes} 分钟`;
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return minutes > 0 ? `等待 ${hours}小时${minutes}分钟` : `等待 ${hours}小时`;
@@ -72,39 +94,60 @@ function waitLabel(value) {
 
 function preview(message) {
   if (!message) return '';
-  if (message.kind === 'text') return String(message.content?.text || '').trim();
+  if (message.kind === 'text') return String(message.content?.text || message.text || '').trim();
   if (message.kind === 'goods') return `[商品] ${message.content?.goodsName || ''}`.trim();
   if (message.kind === 'order') return `[订单] ${message.content?.orderSn || message.content?.orderId || ''}`.trim();
   if (message.kind === 'image') return '[图片]';
   return `[${message.kind || '消息'}]`;
 }
 
+function stringifyCardValue(value) {
+  if (value == null) return '';
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  if (Array.isArray(value)) return value.map(stringifyCardValue).filter(Boolean).join(' ');
+  if (typeof value === 'object') return Object.values(value).map(stringifyCardValue).filter(Boolean).join(' ');
+  return '';
+}
+
+function ticketCategoryForMessage(message) {
+  const messageType = String(message?.messageType || '').toLowerCase();
+  const cardType = String(message?.card?.type || '').toLowerCase();
+  const text = [
+    messageType,
+    cardType,
+    stringifyCardValue(message?.card),
+    stringifyCardValue(message?.content)
+  ].join(' ');
+
+  if (messageType === 'reshipment_card' || cardType === 'reshipment' || /补寄/.test(text)) return 'reshipment';
+  if (messageType === 'address_change_card' || cardType === 'address_change' || /改地址|修改地址|地址变更/.test(text)) return 'address';
+  if (messageType === 'refund_card' || cardType === 'refund' || /售后|退款|退货|换货/.test(text)) return 'afterSale';
+  return '';
+}
+
+function ticketCategoryLabel(category) {
+  if (category === 'reshipment') return '补寄';
+  if (category === 'address') return '改地址';
+  return '售后';
+}
+
+function ticketSummary(message, fallbackText) {
+  const card = message?.card || {};
+  return String(
+    card.event_text
+    || card.application_reason
+    || card.application_type
+    || card.product?.title
+    || fallbackText
+    || ticketCategoryLabel(ticketCategoryForMessage(message))
+  ).trim();
+}
+
 function platformLabel(platform) {
   platform = normalizePlatformName(platform);
   if (platform === 'qn') return '千牛';
-  if (platform === 'pdd' || platform === 'publicplatform') return '拼多多';
+  if (platform === 'pdd') return '拼多多';
   return '平台';
-}
-
-function addEvent(label, detail) {
-  state.events.unshift({
-    at: Date.now(),
-    label,
-    detail: detail ? String(detail) : ''
-  });
-  state.events = state.events.slice(0, 12);
-  renderEvents();
-}
-
-function renderEvents() {
-  if (!els.events || typeof document.createElement !== 'function') return;
-  const items = state.events.map((event) => {
-    const item = document.createElement('div');
-    item.className = 'plugin-event';
-    item.textContent = `${timeLabel(event.at)} ${event.label}${event.detail ? ` - ${event.detail}` : ''}`;
-    return item;
-  });
-  els.events.replaceChildren(...items);
 }
 
 function ensureConversation(message, platform) {
@@ -117,6 +160,8 @@ function ensureConversation(message, platform) {
       platform: platform || 'pdd',
       lastBuyerText: '',
       lastBuyerTime: 0,
+      lastAssistantText: '',
+      lastAssistantTime: 0,
       lastMessageTime: 0,
       unreadCount: 0
     });
@@ -127,29 +172,54 @@ function ensureConversation(message, platform) {
   return conversation;
 }
 
-function getConversationList() {
-  return Array.from(state.conversations.values()).sort((a, b) => {
-    const timeDelta = (b.lastBuyerTime || 0) - (a.lastBuyerTime || 0);
-    if (timeDelta !== 0) return timeDelta;
-    return (b.lastMessageTime || 0) - (a.lastMessageTime || 0);
-  });
+function conversationFromManual(item) {
+  const id = String(item.conversationId || '');
+  if (!id) return null;
+  const existing = state.conversations.get(id);
+  return existing || {
+    id,
+    title: item.customerName || id,
+    platform: item.platform || 'pdd',
+    lastBuyerText: item.lastText || item.reason || '',
+    lastBuyerTime: item.lastBuyerAt || item.pendingSince || 0,
+    lastAssistantText: '',
+    lastAssistantTime: item.lastAssistantAt || 0,
+    lastMessageTime: item.lastBuyerAt || item.pendingSince || 0,
+    unreadCount: 0
+  };
 }
 
-function getPendingConversations() {
-  return getConversationList().filter((item) => item.unreadCount > 0);
+function findTicketByConversationId(conversationId) {
+  const id = String(conversationId || '');
+  if (!id) return null;
+  for (const tickets of Object.values(state.tickets)) {
+    if (tickets.has(id)) return tickets.get(id);
+  }
+  return null;
 }
 
-function getManualConversations() {
-  return Array.from(state.manualConversations.values()).sort((a, b) => {
-    const left = b.pendingSince || b.lastBuyerAt || 0;
-    const right = a.pendingSince || a.lastBuyerAt || 0;
-    return left - right;
-  });
+function conversationFromTicket(item) {
+  const id = String(item?.conversationId || '');
+  if (!id) return null;
+  const existing = state.conversations.get(id);
+  return existing || {
+    id,
+    title: item.title || id,
+    platform: normalizePlatformName(item.platform || 'pdd') || 'pdd',
+    lastBuyerText: item.summary || ticketCategoryLabel(item.category),
+    lastBuyerTime: item.timestamp || 0,
+    lastAssistantText: '',
+    lastAssistantTime: 0,
+    lastMessageTime: item.timestamp || 0,
+    unreadCount: 0
+  };
 }
 
 function getActiveConversation() {
   if (!state.activeConversationId) return null;
-  return state.conversations.get(state.activeConversationId) || null;
+  return state.conversations.get(state.activeConversationId)
+    || conversationFromManual(state.manualConversations.get(state.activeConversationId) || {})
+    || conversationFromTicket(findTicketByConversationId(state.activeConversationId));
 }
 
 function getCurrentPlatform() {
@@ -164,16 +234,67 @@ function getCurrentPlatform() {
 }
 
 function getCurrentStatus() {
-  const platform = getCurrentPlatform();
-  return state.statuses[platform] || null;
+  return state.statuses[getCurrentPlatform()] || null;
 }
 
 function isManualConversation(conversationId) {
   return state.manualConversations.has(String(conversationId || ''));
 }
 
-function getDisplayConversations() {
-  return state.activeTab === 'manual' ? getManualConversations() : getPendingConversations();
+function normalizeCurrentConversation(payload) {
+  const data = payload?.protocol?.payload || payload?.payload || payload || {};
+  const id = String(
+    data.ccode
+    || data.conversationId
+    || data.UIDSwitchInfo
+    || data.uid
+    || data.id
+    || ''
+  ).trim();
+  if (!id) return null;
+  return {
+    id,
+    title: String(data.nick || data.customerName || data.buyerName || data.name || id).trim() || id,
+    platform: normalizePlatformName(data.platform || 'pdd') || 'pdd',
+    lastBuyerText: String(data.lastText || data.lastBuyerText || data.message || '').trim(),
+    lastBuyerTime: Number(data.lastBuyerAt || data.lastBuyerTime || data.timestamp) || 0,
+    lastAssistantText: String(data.lastAssistantText || '').trim(),
+    lastAssistantTime: Number(data.lastAssistantAt || data.lastAssistantTime) || 0,
+    lastMessageTime: Number(data.lastMessageTime || data.lastBuyerAt || data.timestamp) || Date.now(),
+    unreadCount: 0
+  };
+}
+
+function applyCurrentConversation(payload) {
+  const conversation = normalizeCurrentConversation(payload);
+  if (!conversation) return null;
+  const existing = state.conversations.get(conversation.id);
+  state.conversations.set(conversation.id, {
+    ...(existing || {}),
+    ...conversation,
+    lastBuyerText: conversation.lastBuyerText || existing?.lastBuyerText || '',
+    lastBuyerTime: conversation.lastBuyerTime || existing?.lastBuyerTime || 0,
+    lastAssistantText: conversation.lastAssistantText || existing?.lastAssistantText || '',
+    lastAssistantTime: conversation.lastAssistantTime || existing?.lastAssistantTime || 0,
+    unreadCount: existing?.unreadCount || conversation.unreadCount || 0
+  });
+  state.activeConversationId = conversation.id;
+  renderAll();
+  return state.conversations.get(conversation.id);
+}
+
+function sortedManualItems(filterFn) {
+  return Array.from(state.manualConversations.values())
+    .filter(filterFn)
+    .sort((a, b) => (b.pendingSince || b.lastBuyerAt || 0) - (a.pendingSince || a.lastBuyerAt || 0));
+}
+
+function getTemporaryManualItems() {
+  return sortedManualItems((item) => String(item.reason || '') === 'manual_takeover');
+}
+
+function getPendingHumanItems() {
+  return sortedManualItems((item) => String(item.reason || '') !== 'manual_takeover');
 }
 
 function renderStatus() {
@@ -196,17 +317,36 @@ function renderStatus() {
 }
 
 function renderMetrics() {
-  setText(els.pending, getPendingConversations().length || '--');
+  setText(els.pending, getPendingHumanItems().length || '--');
   setText(els.today, state.today);
   setText(els.sent, state.sent);
-  setText(els.clients, `${state.clients.size} client${state.clients.size === 1 ? '' : 's'}`);
+  setText(els.manualBadge, getTemporaryManualItems().length);
+  setText(els.pendingHumanBadge, getPendingHumanItems().length);
+  setText(els.ticketReshipmentBadge, state.tickets.reshipment.size);
+  setText(els.ticketAddressBadge, state.tickets.address.size);
+  setText(els.ticketAfterSaleBadge, state.tickets.afterSale.size);
 }
 
-function renderTabs() {
-  const manualCount = getManualConversations().length;
-  setText(els.manualBadge, manualCount);
-  els.tabPending?.classList?.toggle('active', state.activeTab === 'pending');
-  els.tabManual?.classList?.toggle('active', state.activeTab === 'manual');
+function renderMainTabs() {
+  const showAssistant = state.activeMainTab !== 'ticket';
+  els.assistantTab?.classList?.toggle('active', showAssistant);
+  els.ticketTab?.classList?.toggle('active', !showAssistant);
+  els.assistantPanel?.classList?.toggle('hidden', !showAssistant);
+  els.ticketPanel?.classList?.toggle('hidden', showAssistant);
+}
+
+function renderHandoffSwitch() {
+  const showManual = state.activeHandoffList !== 'pending';
+  els.manualListAction?.classList?.toggle('active', showManual);
+  els.pendingListAction?.classList?.toggle('active', !showManual);
+  els.manualMessages?.classList?.toggle('hidden', !showManual);
+  els.pendingMessages?.classList?.toggle('hidden', showManual);
+}
+
+function renderTicketSwitch() {
+  els.ticketReshipmentAction?.classList?.toggle('active', state.activeTicketCategory === 'reshipment');
+  els.ticketAddressAction?.classList?.toggle('active', state.activeTicketCategory === 'address');
+  els.ticketAfterSaleAction?.classList?.toggle('active', state.activeTicketCategory === 'afterSale');
 }
 
 function renderMode() {
@@ -217,27 +357,72 @@ function renderMode() {
     : '人工值守';
 
   setText(els.autoReply, autoReplyText);
-  setText(els.modeHint, inManual ? '人工跟进中' : state.aiEnabled ? 'AI 托管中' : '人工值守');
-  setText(els.manualAction, inManual ? '继续接待' : '转人工');
+  setText(els.modeHint, inManual ? '人工接管中' : state.aiEnabled ? 'AI 托管中' : '人工值守');
+  if (els.modeHint?.classList) {
+    els.modeHint.classList.toggle('manual', inManual);
+    els.modeHint.classList.toggle('idle', !state.aiEnabled && !inManual);
+  }
+  setText(els.manualAction, inManual ? '恢复 AI' : '临时接管');
+  if (els.manualAction?.classList) {
+    els.manualAction.classList.toggle('danger', !inManual);
+    els.manualAction.classList.toggle('primary', inManual);
+  }
+  setDisabled(els.manualAction, !activeConversation);
 }
 
 function renderSelection() {
   const activeConversation = getActiveConversation();
   if (!activeConversation) {
-    setText(els.selection, '暂无会话');
+    setText(els.selection, '未选中会话');
     return;
   }
 
-  const pendingText = isManualConversation(activeConversation.id)
-    ? '待人工处理'
+  const manual = state.manualConversations.get(activeConversation.id);
+  const stateText = manual
+    ? (manual.reason === 'manual_takeover' ? '临时接管' : '待人工回复')
     : activeConversation.unreadCount > 0
       ? `待回复 ${activeConversation.unreadCount}`
       : '已读';
-  setText(els.selection, `${activeConversation.title} · ${pendingText}`);
+  setText(els.selection, `${activeConversation.title} · ${stateText}`);
+}
+
+function renderCurrentConversation() {
+  if (!els.currentConversation || typeof document.createElement !== 'function') return;
+  const activeConversation = getActiveConversation();
+  if (!activeConversation) {
+    const title = document.createElement('strong');
+    title.textContent = '未选中会话';
+    const body = document.createElement('p');
+    body.textContent = '点击会话后，这里显示当前会话信息。';
+    els.currentConversation.className = 'current-conversation empty-state-card';
+    els.currentConversation.replaceChildren(title, body);
+    return;
+  }
+
+  const manual = state.manualConversations.get(activeConversation.id);
+  const header = document.createElement('div');
+  header.className = 'current-conversation-header';
+  const title = document.createElement('strong');
+  title.textContent = activeConversation.title;
+  const subtitle = document.createElement('small');
+  subtitle.textContent = manual
+    ? `状态：${manual.reason === 'manual_takeover' ? '临时接管' : '待人工回复'} · ${waitLabel(manual.pendingSince)}`
+    : activeConversation.unreadCount > 0
+      ? `状态：待回复 ${activeConversation.unreadCount}`
+      : '状态：AI 接待中';
+  header.append(title, subtitle);
+
+  const summary = document.createElement('p');
+  const buyerText = activeConversation.lastBuyerText || '暂无买家消息';
+  const lastTime = activeConversation.lastBuyerTime ? timeLabel(activeConversation.lastBuyerTime) : '--';
+  summary.textContent = `${platformLabel(activeConversation.platform)} · ${lastTime} · ${buyerText}`;
+
+  els.currentConversation.className = 'current-conversation';
+  els.currentConversation.replaceChildren(header, summary);
 }
 
 async function focusConversation(conversation) {
-  if (!conversation) return;
+  if (!conversation?.id) return;
   state.activeConversationId = conversation.id;
   renderAll();
   await window.pddFuke.focusConversation?.({
@@ -247,69 +432,136 @@ async function focusConversation(conversation) {
   });
 }
 
-function renderMessages() {
-  if (!els.messages || typeof document.createElement !== 'function') return;
-  const items = getDisplayConversations();
+async function requestCurrentConversation() {
+  if (typeof window.pddFuke.getCurrentPddConv !== 'function') return null;
+  return window.pddFuke.getCurrentPddConv({});
+}
 
+async function markActiveConversationManual() {
+  const activeConversation = getActiveConversation();
+  if (!activeConversation) return false;
+  const now = Date.now();
+  const entry = {
+    conversationId: activeConversation.id,
+    customerName: activeConversation.title,
+    platform: activeConversation.platform,
+    reason: 'manual_takeover',
+    scope: 'conversation',
+    pendingSince: activeConversation.lastBuyerTime || now,
+    lastBuyerAt: activeConversation.lastBuyerTime || now,
+    lastAssistantAt: activeConversation.lastAssistantTime || 0
+  };
+  state.manualConversations.set(activeConversation.id, entry);
+  renderAll();
+  await window.pddFuke.markManualConversation?.(entry);
+  return true;
+}
+
+function createMessageCard(conversation, options = {}) {
+  const card = document.createElement('article');
+  const classes = ['message-card'];
+  if (options.manual) classes.push('manual');
+  if (conversation.id === state.activeConversationId) classes.push('active');
+  card.className = classes.join(' ');
+
+  const title = document.createElement('strong');
+  title.textContent = `${conversation.title} · ${options.label}`;
+  const body = document.createElement('p');
+  body.textContent = conversation.lastBuyerText || options.reason || '暂无内容';
+  const meta = document.createElement('span');
+  meta.className = options.manual ? 'wait' : '';
+  meta.textContent = `${waitLabel(options.pendingSince || conversation.lastBuyerTime)} · ${platformLabel(conversation.platform)} · ${timeLabel(options.lastBuyerAt || conversation.lastBuyerTime)}`;
+
+  card.textContent = `${title.textContent} ${body.textContent} ${meta.textContent}`;
+  card.append(title, body, meta);
+  card.addEventListener('click', async () => {
+    await focusConversation(conversation);
+  });
+  return card;
+}
+
+function renderList(container, items, emptyText, options = {}) {
+  if (!container || typeof document.createElement !== 'function') return;
   if (!items.length) {
-    const empty = els.emptyState || document.createElement('div');
+    const empty = document.createElement('div');
     empty.className = 'empty';
-    empty.textContent = state.activeTab === 'manual' ? '暂无待人工会话' : '暂无买家消息';
-    els.messages.replaceChildren(empty);
+    empty.textContent = emptyText;
+    container.replaceChildren(empty);
     return;
   }
 
   const cards = items.map((item) => {
-    const conversation = state.activeTab === 'manual'
-      ? state.conversations.get(item.conversationId) || {
-          id: item.conversationId,
-          title: item.customerName || item.conversationId,
-          platform: item.platform || 'pdd',
-          lastBuyerText: '',
-          lastBuyerTime: item.lastBuyerAt || item.pendingSince || 0,
-          lastMessageTime: item.lastBuyerAt || item.pendingSince || 0,
-          unreadCount: 0
-        }
-      : item;
+    const conversation = conversationFromManual(item);
+    return createMessageCard(conversation, {
+      manual: options.manual,
+      label: options.label,
+      reason: item.reason,
+      pendingSince: item.pendingSince,
+      lastBuyerAt: item.lastBuyerAt
+    });
+  });
+  container.replaceChildren(...cards);
+}
 
+function currentTicketItems() {
+  return Array.from(state.tickets[state.activeTicketCategory].values())
+    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+}
+
+function renderTicketList() {
+  if (!els.ticketMessages || typeof document.createElement !== 'function') return;
+  const items = currentTicketItems();
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = `暂无${ticketCategoryLabel(state.activeTicketCategory)}会话`;
+    els.ticketMessages.replaceChildren(empty);
+    return;
+  }
+
+  const cards = items.map((item) => {
     const card = document.createElement('article');
-    const classes = ['message-card'];
-    if (state.activeTab === 'manual') classes.push('manual');
-    if (conversation.id === state.activeConversationId) classes.push('active');
-    card.className = classes.join(' ');
+    card.className = 'ticket-card';
 
+    const main = document.createElement('div');
+    main.className = 'ticket-card-main';
     const title = document.createElement('strong');
-    title.textContent = state.activeTab === 'manual'
-      ? `${conversation.title} · 待人工`
-      : `${conversation.title} · 待回复`;
-
-    const body = document.createElement('p');
-    body.textContent = conversation.lastBuyerText || '暂无内容';
-
+    title.textContent = item.title;
+    const summary = document.createElement('p');
+    summary.textContent = item.summary || ticketCategoryLabel(item.category);
     const meta = document.createElement('span');
-    if (state.activeTab === 'manual') {
-      const manual = state.manualConversations.get(conversation.id);
-      meta.className = 'wait';
-      meta.textContent = `${waitLabel(manual?.pendingSince)} · ${platformLabel(conversation.platform)} · ${timeLabel(manual?.lastBuyerAt || manual?.pendingSince)}`;
-    } else {
-      meta.textContent = `${platformLabel(conversation.platform)} · ${timeLabel(conversation.lastBuyerTime)}`;
-    }
+    meta.textContent = `${platformLabel(item.platform)} · ${timeLabel(item.timestamp)}`;
+    main.append(title, summary, meta);
 
-    card.textContent = `${title.textContent} ${body.textContent} ${meta.textContent}`;
-    card.append(title, body, meta);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = '确认';
+    button.addEventListener('click', () => {
+      state.confirmedTickets.add(item.key);
+      state.tickets[item.category].delete(item.conversationId);
+      renderAll();
+    });
+
+    card.textContent = `${title.textContent} ${summary.textContent} ${meta.textContent} ${button.textContent}`;
+    card.append(main, button);
     card.addEventListener('click', async () => {
-      await focusConversation(conversation);
+      await focusConversation(conversationFromTicket(item));
     });
     return card;
   });
-
-  els.messages.replaceChildren(...cards);
+  els.ticketMessages.replaceChildren(...cards);
 }
 
 function renderPendingAction() {
   if (!els.pendingAction) return;
-  const pendingCount = getPendingConversations().length;
-  els.pendingAction.textContent = pendingCount > 0 ? `查看待回复 (${pendingCount})` : '查看待回复';
+  const pendingCount = getPendingHumanItems().length;
+  els.pendingAction.textContent = pendingCount > 0 ? `查看待人工回复(${pendingCount})` : '查看待人工回复';
+  setDisabled(els.pendingAction, pendingCount <= 0);
+}
+
+function syncCompactLayout() {
+  if (!document.body?.classList?.toggle) return;
+  document.body.classList.toggle('compact', Number(window.innerWidth || 0) > 0 && Number(window.innerWidth || 0) <= 220);
 }
 
 function renderAll() {
@@ -317,11 +569,23 @@ function renderAll() {
   setText(els.lastTime, activeConversation?.lastBuyerTime ? timeLabel(activeConversation.lastBuyerTime) : '--');
   renderStatus();
   renderMetrics();
-  renderTabs();
+  renderMainTabs();
   renderMode();
   renderSelection();
   renderPendingAction();
-  renderMessages();
+  renderCurrentConversation();
+  renderHandoffSwitch();
+  renderTicketSwitch();
+  renderList(els.manualMessages, getTemporaryManualItems(), '暂无临时接管会话', {
+    manual: true,
+    label: '临时接管'
+  });
+  renderList(els.pendingMessages, getPendingHumanItems(), '暂无待人工回复', {
+    manual: true,
+    label: '待人工回复'
+  });
+  renderTicketList();
+  syncCompactLayout();
 }
 
 function normalizePlatform(payload) {
@@ -331,8 +595,10 @@ function normalizePlatform(payload) {
 function applyManualSnapshot(snapshot) {
   state.manualConversations.clear();
   for (const item of snapshot?.manual || []) {
-    state.manualConversations.set(String(item.conversationId), {
-      conversationId: String(item.conversationId),
+    const conversationId = String(item.conversationId || '');
+    if (!conversationId) continue;
+    state.manualConversations.set(conversationId, {
+      conversationId,
       customerName: String(item.customerName || ''),
       platform: normalizePlatformName(String(item.platform || '')),
       reason: String(item.reason || ''),
@@ -341,9 +607,6 @@ function applyManualSnapshot(snapshot) {
       lastBuyerAt: Number(item.lastBuyerAt) || 0,
       lastAssistantAt: Number(item.lastAssistantAt) || 0
     });
-  }
-  if (state.activeTab === 'manual' && !getManualConversations().length) {
-    state.activeTab = 'pending';
   }
   renderAll();
 }
@@ -354,6 +617,7 @@ function handleIncomingMessage(payload) {
   const conversation = ensureConversation(message, platform);
   const text = preview(message);
   const timestamp = Number(message.timestamp) || Date.now();
+  const ticketCategory = ticketCategoryForMessage(message);
 
   conversation.lastMessageTime = timestamp;
   if (message.direction === 'user') {
@@ -361,7 +625,6 @@ function handleIncomingMessage(payload) {
     conversation.lastBuyerTime = timestamp;
     conversation.unreadCount += 1;
     state.today += 1;
-    state.activeConversationId = conversation.id;
 
     const manual = state.manualConversations.get(conversation.id);
     if (manual) {
@@ -371,17 +634,32 @@ function handleIncomingMessage(payload) {
       manual.pendingSince = manual.pendingSince || timestamp;
     }
   } else if (message.direction === 'assistant') {
+    conversation.lastAssistantText = text;
+    conversation.lastAssistantTime = timestamp;
     conversation.unreadCount = 0;
     state.sent += 1;
 
     const manual = state.manualConversations.get(conversation.id);
     if (manual) {
       manual.lastAssistantAt = timestamp;
-      manual.pendingSince = 0;
     }
   }
 
-  addEvent(message.direction === 'assistant' ? 'assistant reply' : 'buyer message', conversation.title);
+  if (ticketCategory) {
+    const key = `${ticketCategory}:${conversation.id}`;
+    if (!state.confirmedTickets.has(key)) {
+      state.tickets[ticketCategory].set(conversation.id, {
+        key,
+        category: ticketCategory,
+        conversationId: conversation.id,
+        title: conversation.title,
+        platform: conversation.platform,
+        summary: ticketSummary(message, text),
+        timestamp
+      });
+    }
+  }
+
   renderAll();
 }
 
@@ -403,7 +681,7 @@ async function bootstrap() {
     state.aiMerchantName = String(aiSettings?.merchantName || '').trim();
     applyManualSnapshot(status?.handoff || { manual: [] });
   } catch (error) {
-    addEvent('init error', error?.message || String(error));
+    if (typeof console !== 'undefined' && typeof console.error === 'function') console.error(error);
   }
 
   renderAll();
@@ -411,55 +689,69 @@ async function bootstrap() {
 
 els.close?.addEventListener('click', () => window.pddFuke.closeFloating?.());
 els.minimize?.addEventListener('click', () => window.pddFuke.minimizeFloating?.());
-els.tabPending?.addEventListener('click', () => {
-  state.activeTab = 'pending';
+els.assistantTab?.addEventListener('click', () => {
+  state.activeMainTab = 'assistant';
   renderAll();
 });
-els.tabManual?.addEventListener('click', () => {
-  state.activeTab = 'manual';
-  const first = getManualConversations()[0];
-  if (first) state.activeConversationId = first.conversationId;
+els.ticketTab?.addEventListener('click', () => {
+  state.activeMainTab = 'ticket';
   renderAll();
+});
+els.manualListAction?.addEventListener('click', () => {
+  state.activeHandoffList = 'manual';
+  renderAll();
+});
+els.pendingListAction?.addEventListener('click', () => {
+  state.activeHandoffList = 'pending';
+  renderAll();
+});
+els.ticketReshipmentAction?.addEventListener('click', () => {
+  state.activeTicketCategory = 'reshipment';
+  renderAll();
+});
+els.ticketAddressAction?.addEventListener('click', () => {
+  state.activeTicketCategory = 'address';
+  renderAll();
+});
+els.ticketAfterSaleAction?.addEventListener('click', () => {
+  state.activeTicketCategory = 'afterSale';
+  renderAll();
+});
+els.currentConversation?.addEventListener('click', () => {
+  requestCurrentConversation().catch((error) => {
+    if (typeof console !== 'undefined' && typeof console.error === 'function') console.error(error);
+  });
 });
 els.pendingAction?.addEventListener('click', async () => {
-  const next = getPendingConversations()[0];
+  const next = getPendingHumanItems()[0];
   if (!next) return;
-  state.activeTab = 'pending';
-  await focusConversation(next);
+  await focusConversation(conversationFromManual(next));
 });
 els.manualAction?.addEventListener('click', async () => {
   const activeConversation = getActiveConversation();
-  if (!activeConversation) return;
+  if (!activeConversation) {
+    state.pendingManualAfterCurrent = true;
+    await requestCurrentConversation();
+    return;
+  }
   if (isManualConversation(activeConversation.id)) {
+    state.manualConversations.delete(activeConversation.id);
+    renderAll();
     await window.pddFuke.resumeConversation?.({
       conversationId: activeConversation.id,
       platform: activeConversation.platform
     });
-    state.manualConversations.delete(activeConversation.id);
-    if (state.activeTab === 'manual' && !getManualConversations().length) state.activeTab = 'pending';
-    renderAll();
     return;
   }
-  state.manualConversations.set(activeConversation.id, {
-    conversationId: activeConversation.id,
-    customerName: activeConversation.title,
-    platform: activeConversation.platform,
-    pendingSince: activeConversation.lastBuyerTime || Date.now(),
-    lastBuyerAt: activeConversation.lastBuyerTime || Date.now(),
-    lastAssistantAt: 0
-  });
-  state.activeTab = 'manual';
-  renderAll();
+  await markActiveConversationManual();
 });
 
-window.pddFuke.onPddStatus?.((status) => {
-  updatePlatformStatus('pdd', status);
-  addEvent('pdd status', status?.running ? 'running' : 'stopped');
-});
-window.pddFuke.onQnStatus?.((status) => {
-  updatePlatformStatus('qn', status);
-  addEvent('qn status', status?.running ? 'running' : 'stopped');
-});
+if (typeof window.addEventListener === 'function') {
+  window.addEventListener('resize', syncCompactLayout);
+}
+
+window.pddFuke.onPddStatus?.((status) => updatePlatformStatus('pdd', status));
+window.pddFuke.onQnStatus?.((status) => updatePlatformStatus('qn', status));
 window.pddFuke.onClientConnected?.((client) => {
   if (client?.id) {
     state.clients.set(client.id, {
@@ -467,23 +759,24 @@ window.pddFuke.onClientConnected?.((client) => {
       platform: normalizePlatformName(client.platform)
     });
   }
-  renderMetrics();
   renderStatus();
-  addEvent('client connected', client?.platform || 'unknown');
 });
 window.pddFuke.onClientDisconnected?.((client) => {
   if (client?.id) state.clients.delete(client.id);
-  renderMetrics();
   renderStatus();
-  addEvent('client disconnected', client?.platform || client?.id || 'unknown');
 });
 window.pddFuke.onMessage?.(handleIncomingMessage);
-window.pddFuke.onManualState?.((snapshot) => {
-  applyManualSnapshot(snapshot);
-  addEvent('manual state', `${(snapshot?.manual || []).length} conversation(s)`);
-});
-window.pddFuke.onBridgeDiagnostic?.(({ diagnostic }) => {
-  addEvent(`probe ${diagnostic?.name || ''}`.trim(), diagnostic?.payload?.url || diagnostic?.payload?.target || '');
+window.pddFuke.onManualState?.(applyManualSnapshot);
+window.pddFuke.onProtocolMessage?.((payload) => {
+  const type = String(payload?.protocol?.type || payload?.type || '').toLowerCase();
+  if (type !== 'currentconv') return;
+  const conversation = applyCurrentConversation(payload);
+  if (conversation && state.pendingManualAfterCurrent) {
+    state.pendingManualAfterCurrent = false;
+    markActiveConversationManual().catch((error) => {
+      if (typeof console !== 'undefined' && typeof console.error === 'function') console.error(error);
+    });
+  }
 });
 window.pddFuke.onCdpStatus?.((status) => {
   if (state.statuses.pdd) {
@@ -491,7 +784,5 @@ window.pddFuke.onCdpStatus?.((status) => {
   }
   renderStatus();
 });
-window.pddFuke.onWsError?.((payload) => addEvent('ws error', payload?.error || ''));
-window.pddFuke.onPddError?.((message) => addEvent('pdd error', message));
 
 bootstrap();

@@ -9,6 +9,7 @@ const {
   createPddLaunchHandler,
   createSendMessageHandler,
   createPddCommandHandler,
+  createMarkManualConversationHandler,
   createAutoReplyHandler,
   createConversationHandoffStore,
   createBridgeObservationState,
@@ -18,9 +19,14 @@ const {
   noteBridgeClientDisconnected,
   noteBridgeDiagnostic,
   bindPddStatusEvents,
+  bindQnStatusEvents,
   startPddBridgeServer,
   createWbChatChangeHandler,
-  computeFloatingBounds
+  computeFloatingBounds,
+  extractTargetBounds,
+  toElectronDipBounds,
+  areBoundsEqual,
+  shouldHoldFloatingOnMissingTarget
 } = require('../main/index');
 
 test('pdd launch handler logs and rejects launch failures', async () => {
@@ -62,6 +68,39 @@ test('pdd launch handler logs returned launch error status', async () => {
 
   assert.equal(await handler(), status);
   assert.deepEqual(messages[1], ['error', '[pdd:launch] launch returned error status', status.lastError]);
+});
+
+test('pdd launch handler does not download when existing local workbench launch fails', async () => {
+  const os = require('node:os');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdd-launch-handler-'));
+  const exePath = path.join(tempDir, 'PddWorkbench.exe');
+  fs.writeFileSync(exePath, '');
+  let ensureCalled = false;
+
+  const handler = createPddLaunchHandler({
+    getPddManager: () => ({
+      async resolveExePath() {
+        return exePath;
+      },
+      async launch() {
+        throw new Error('launch timeout');
+      }
+    }),
+    getOssVersionManager: () => ({
+      async ensureRecommendation() {
+        ensureCalled = true;
+        return {};
+      }
+    }),
+    logger: { log() {}, error() {} }
+  });
+
+  try {
+    await assert.rejects(() => handler(), /launch timeout/);
+    assert.equal(ensureCalled, false);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 });
 
 test('main process forwards bridge and CDP statuses to renderer channels and pdd status', () => {
@@ -205,11 +244,179 @@ test('floating plugin bounds follow the right side of the PDD window and clamp t
     pluginSize: { width: 320, height: 640 },
     gap: 8
   }), {
-    x: 852,
+    x: 1112,
     y: 20,
     width: 320,
     height: 640
   });
+
+  assert.deepEqual(computeFloatingBounds({
+    targetBounds: { x: 100, y: 30, width: 320, height: 420 },
+    displayBounds: { x: 0, y: 0, width: 1440, height: 900 },
+    gap: 8
+  }), {
+    x: 428,
+    y: 30,
+    width: 196,
+    height: 420
+  });
+});
+
+test('main process forwards qn status and updates floating plugin bounds', () => {
+  const manager = new EventEmitter();
+  const sent = [];
+  const floating = [];
+
+  bindQnStatusEvents(
+    manager,
+    (channel, payload) => sent.push([channel, payload]),
+    { updateFloatingPluginBounds: (status) => floating.push(status) }
+  );
+
+  const status = {
+    running: true,
+    pid: 5678,
+    windows: [{ bounds: { x: 20, y: 30, width: 900, height: 700 } }]
+  };
+  manager.emit('status', status);
+  manager.emit('launched', status);
+
+  assert.deepEqual(sent, [
+    ['qn:status', status],
+    ['qn:status', status]
+  ]);
+  assert.deepEqual(floating, [status, status]);
+});
+
+test('floating plugin targets the largest visible main window instead of small dialogs', () => {
+  assert.deepEqual(extractTargetBounds({
+    workbenchWindows: [
+      {
+        hwnd: '2',
+        title: '登录提示',
+        className: '#32770',
+        visible: true,
+        bounds: { x: 900, y: 120, width: 360, height: 320 }
+      },
+      {
+        hwnd: '1',
+        title: '拼多多商家工作台',
+        className: 'Chrome_WidgetWin_1',
+        visible: true,
+        bounds: { x: 80, y: 40, width: 1280, height: 820 }
+      },
+      {
+        hwnd: '3',
+        title: '更新提醒',
+        className: 'Chrome_WidgetWin_1',
+        visible: true,
+        bounds: { x: 980, y: 160, width: 420, height: 360 }
+      }
+    ]
+  }), { x: 80, y: 40, width: 1280, height: 820 });
+});
+
+test('floating plugin prefers workbench windows over larger pid fallback windows', () => {
+  assert.deepEqual(extractTargetBounds({
+    workbenchWindows: [
+      {
+        hwnd: '1',
+        title: '拼多多商家工作台',
+        className: 'Chrome_WidgetWin_1',
+        visible: true,
+        bounds: { x: 60, y: 50, width: 1180, height: 760 }
+      }
+    ],
+    windows: [
+      {
+        hwnd: '2',
+        title: '别的窗口',
+        className: 'Chrome_WidgetWin_1',
+        visible: true,
+        bounds: { x: 10, y: 10, width: 1500, height: 900 }
+      }
+    ]
+  }), { x: 60, y: 50, width: 1180, height: 760 });
+});
+
+test('floating plugin has no target when the workbench window is hidden or minimized', () => {
+  assert.equal(extractTargetBounds({
+    workbenchWindows: [
+      {
+        hwnd: '1',
+        title: '拼多多商家工作台',
+        className: 'Chrome_WidgetWin_1',
+        visible: false,
+        bounds: { x: -32000, y: -32000, width: 160, height: 28 }
+      }
+    ]
+  }), null);
+});
+
+test('floating plugin keeps position during short target probe gaps', () => {
+  assert.equal(shouldHoldFloatingOnMissingTarget(
+    { x: 80, y: 40, width: 1280, height: 820 },
+    1000,
+    1800
+  ), true);
+  assert.equal(shouldHoldFloatingOnMissingTarget(
+    { x: 80, y: 40, width: 1280, height: 820 },
+    1000,
+    2300
+  ), false);
+});
+
+test('floating plugin avoids redundant bounds writes for unchanged position', () => {
+  assert.equal(areBoundsEqual(
+    { x: 1112, y: 20, width: 320, height: 640 },
+    { x: 1112, y: 20, width: 320, height: 640 }
+  ), true);
+  assert.equal(areBoundsEqual(
+    { x: 1112, y: 20, width: 320, height: 640 },
+    { x: 1110, y: 20, width: 320, height: 640 }
+  ), false);
+});
+
+test('floating plugin converts native window bounds to Electron DIP bounds', () => {
+  const converted = toElectronDipBounds(
+    { x: 200, y: 100, width: 1600, height: 1000 },
+    null,
+    (_windowRef, bounds) => ({
+      x: bounds.x / 2,
+      y: bounds.y / 2,
+      width: bounds.width / 2,
+      height: bounds.height / 2
+    })
+  );
+
+  assert.deepEqual(converted, { x: 100, y: 50, width: 800, height: 500 });
+});
+
+test('manual conversation handler writes takeover state into the shared handoff store', async () => {
+  const store = createConversationHandoffStore();
+  const logs = [];
+  const handler = createMarkManualConversationHandler({
+    handoffStore: store,
+    logger: {
+      log: (...args) => logs.push(args),
+      error() {}
+    }
+  });
+
+  const result = await handler(null, {
+    conversationId: 'buyer-1',
+    platform: 'pdd',
+    customerName: '买家甲',
+    reason: 'manual_takeover',
+    scope: 'conversation',
+    pendingSince: 1719200000000,
+    lastBuyerAt: 1719200000000
+  });
+
+  assert.equal(result.manual.conversationId, 'buyer-1');
+  assert.equal(store.isMuted('buyer-1'), true);
+  assert.equal(store.snapshot().manual[0].customerName, '买家甲');
+  assert.equal(logs[0][0], '[conversation:mark-manual]');
 });
 
 test('pdd bridge server serves bridge javascript that connects to the websocket port', async () => {
@@ -263,6 +470,8 @@ test('pdd bridge server serves bridge javascript that connects to the websocket 
     assert.match(script.body, /recv_message/);
     assert.match(script.body, /MMSSocketReceiveMessage/);
     assert.match(script.body, /socketUtil\.sendMsg/);
+    assert.match(script.body, /approveAddressChange/);
+    assert.match(script.body, /address-change-approve-click/);
     assert.match(script.body, /transferConversation/);
     assert.match(script.body, /getAssignCsList/);
     assert.match(script.body, /move_conversation/);
@@ -588,6 +797,8 @@ test('auto reply handler deduplicates concurrent duplicate buyer messages by mes
         return 1;
       }
     }),
+    getAiSettings: () => ({ enabled: true, apiKey: '' }),
+    replyText: '',
     tmagent: {
       baseUrl: 'http://tmagent.local',
       apiKey: 'sk-test',
@@ -674,6 +885,7 @@ test('auto reply handler sends tmagent reply when API key is configured', async 
         return 1;
       }
     }),
+    getAiSettings: () => ({ enabled: true, apiKey: '' }),
     tmagent: {
       baseUrl: 'http://tmagent.local',
       apiKey: 'sk-test',
@@ -710,6 +922,128 @@ test('auto reply handler sends tmagent reply when API key is configured', async 
   assert.equal(sent[0].message.id, 'buyer-1');
   assert.equal(sent[0].message.text, '您好，我看一下。');
   assert.equal(logs.some((entry) => entry[1] === '[auto-reply:sent]' && entry[2].textSource === 'tmagent'), true);
+});
+
+test('auto reply handler approves address-change card locally without tmagent', async () => {
+  const sent = [];
+  const tmagentCalls = [];
+  const logs = [];
+  const handler = createAutoReplyHandler({
+    getWsServer: () => ({
+      sendToTarget(targetId, message) {
+        sent.push({ targetId, message });
+        return 1;
+      }
+    }),
+    getAiSettings: () => ({ enabled: true, apiKey: 'sk-test' }),
+    tmagent: {
+      baseUrl: 'http://tmagent.local',
+      apiKey: 'sk-test',
+      shopId: 'shop-001',
+      shopName: 'PDD Shop',
+      fetchImpl: async () => {
+        tmagentCalls.push(true);
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return { reply: 'should not call tmagent' };
+          }
+        };
+      }
+    },
+    logger: {
+      log: (...args) => logs.push(['log', ...args]),
+      error: (...args) => logs.push(['error', ...args])
+    }
+  });
+
+  const result = await handler({
+    message: {
+      id: 'addr-1',
+      conversationId: 'buyer-address',
+      senderId: 'buyer-address',
+      direction: 'system',
+      kind: 'local_action',
+      messageType: 'address_change_card',
+      localAction: { act: 'approveAddressChange' },
+      content: {},
+      timestamp: Date.now()
+    }
+  });
+
+  assert.equal(result.sent, 1);
+  assert.equal(result.localAction, 'approveAddressChange');
+  assert.deepEqual(sent, [{
+    targetId: 'buyer-address',
+    message: { act: 'approveAddressChange', id: 'buyer-address' }
+  }]);
+  assert.equal(tmagentCalls.length, 0);
+  assert.equal(logs.some((entry) => entry[1] === '[auto-reply:local-action]' && entry[2].action === 'approveAddressChange'), true);
+});
+
+test('auto reply handler uploads refund card to tmagent', async () => {
+  const calls = [];
+  const sent = [];
+  const handler = createAutoReplyHandler({
+    getWsServer: () => ({
+      sendToTarget(targetId, message) {
+        sent.push({ targetId, message });
+        return 1;
+      }
+    }),
+    getAiSettings: () => ({ enabled: true, apiKey: '' }),
+    tmagent: {
+      baseUrl: 'http://tmagent.local',
+      apiKey: 'sk-test',
+      shopId: 'shop-001',
+      shopName: 'PDD Shop',
+      fetchImpl: async (_url, options) => {
+        calls.push(JSON.parse(options.body));
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return { reply: '', action: 'human_takeover' };
+          }
+        };
+      }
+    },
+    logger: { log() {}, error() {} }
+  });
+
+  const result = await handler({
+    message: {
+      id: 'refund-1',
+      conversationId: 'buyer-refund',
+      senderId: 'buyer-refund',
+      direction: 'system',
+      kind: 'service_context',
+      messageType: 'refund_card',
+      card: {
+        type: 'refund',
+        event_text: '工单：在途无理由退货款处理，请立即跟进',
+        application_type: '退货款',
+        application_reason: '请安抚消费者',
+        product: { title: '经典普及韦特塔罗牌', actual_paid: '28.40' }
+      },
+      orderFacts: {
+        hasOrder: true,
+        orderStage: 'after_sale',
+        orderSummary: '工单：在途无理由退货款处理，请立即跟进',
+        customerStage: 'after_sale',
+        customerStageSource: 'refund_card'
+      },
+      content: {}
+    }
+  });
+
+  assert.equal(result.skipped, true);
+  assert.equal(result.reason, 'human-takeover');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].message_type, 'refund_card');
+  assert.equal(calls[0].context.refund_work_order.application_type, '退货款');
+  assert.equal(sent.length, 0);
 });
 
 test('auto reply handler treats bridge window error after sendtext as send failure', async () => {
@@ -826,8 +1160,9 @@ test('auto reply handler opens qn conversation before sending text', async () =>
   assert.equal(logs.some((entry) => entry[1] === '[auto-reply:qn-switch]' && entry[2].sent === 1), true);
 });
 
-test('auto reply handler uses bundled tmagent key by default', async () => {
+test('auto reply handler skips tmagent when API key is missing', async () => {
   const sent = [];
+  const tmagentCalls = [];
   const handler = createAutoReplyHandler({
     getWsServer: () => ({
       sendToTarget(targetId, message) {
@@ -835,15 +1170,20 @@ test('auto reply handler uses bundled tmagent key by default', async () => {
         return 1;
       }
     }),
+    getAiSettings: () => ({ enabled: true, apiKey: '' }),
+    replyText: '',
     tmagent: {
       baseUrl: 'http://tmagent.local',
-      fetchImpl: async () => ({
-        ok: true,
-        status: 200,
-        async json() {
-          return { reply: 'AI reply', action: null };
-        }
-      })
+      fetchImpl: async () => {
+        tmagentCalls.push(true);
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return { reply: 'AI reply', action: null };
+          }
+        };
+      }
     },
     logger: { log() {}, error() {} }
   });
@@ -859,7 +1199,8 @@ test('auto reply handler uses bundled tmagent key by default', async () => {
   });
 
   assert.equal(result.sent, 1);
-  assert.equal(sent[0].message.text, 'AI reply');
+  assert.equal(sent[0].message.text, '收到0806，自动回复测试');
+  assert.equal(tmagentCalls.length, 0);
 });
 
 test('auto reply handler uses saved ai settings when explicit tmagent config is absent', async () => {
@@ -1938,7 +2279,7 @@ test('renderer workspace opens product library window and switches to AI setting
   assert.equal(nodes.transferTraceStatus.textContent, 'transfer-1719200000000');
 });
 
-test('floating renderer shows manual handoff tab, badge count, wait timer, and actions', async () => {
+test('floating renderer shows takeover and pending-human lists without diagnostics', async () => {
   const listeners = new Map();
   const calls = [];
 
@@ -1991,24 +2332,37 @@ test('floating renderer shows manual handoff tab, badge count, wait timer, and a
     pluginPending: createNode(),
     pluginToday: createNode(),
     pluginSent: createNode(),
-    pluginMessages: createNode(),
+    pluginAssistantTab: createNode(),
+    pluginTicketTab: createNode(),
+    pluginAssistantPanel: createNode(),
+    pluginTicketPanel: createNode({ className: 'hidden' }),
+    pluginManualMessages: createNode(),
+    pluginPendingMessages: createNode(),
+    pluginTicketMessages: createNode(),
     pluginLastTime: createNode(),
-    pluginClients: createNode(),
-    pluginEvents: createNode(),
     pluginClose: createNode(),
     pluginMinimize: createNode(),
     pluginAutoReply: createNode(),
     pluginModeHint: createNode(),
     pluginSelection: createNode(),
+    pluginCurrentConversation: createNode(),
     pluginEmptyState: createNode(),
     pluginPendingAction: createNode(),
     pluginManualAction: createNode(),
-    pluginTabPending: createNode(),
-    pluginTabManual: createNode(),
-    pluginManualBadge: createNode()
+    pluginManualListAction: createNode(),
+    pluginPendingListAction: createNode(),
+    pluginTicketReshipmentAction: createNode(),
+    pluginTicketAddressAction: createNode(),
+    pluginTicketAfterSaleAction: createNode(),
+    pluginManualBadge: createNode(),
+    pluginPendingHumanBadge: createNode(),
+    pluginTicketReshipmentBadge: createNode(),
+    pluginTicketAddressBadge: createNode(),
+    pluginTicketAfterSaleBadge: createNode()
   };
 
   const document = {
+    body: createNode(),
     getElementById(id) {
       return nodes[id] || createNode();
     },
@@ -2023,6 +2377,14 @@ test('floating renderer shows manual handoff tab, badge count, wait timer, and a
     focusConversation: async (payload) => {
       calls.push(['focusConversation', payload]);
       return { focused: true };
+    },
+    getCurrentPddConv: async (payload) => {
+      calls.push(['getCurrentPddConv', payload]);
+      return { sent: 1 };
+    },
+    markManualConversation: async (payload) => {
+      calls.push(['markManualConversation', payload]);
+      return { manual: payload };
     },
     resumeConversation: async (payload) => {
       calls.push(['resumeConversation', payload]);
@@ -2041,6 +2403,7 @@ test('floating renderer shows manual handoff tab, badge count, wait timer, and a
             conversationId: 'buyer-2',
             customerName: '买家乙',
             platform: 'pdd',
+            reason: 'manual_takeover',
             pendingSince: 1719190060000,
             lastBuyerAt: 1719190060000
           }
@@ -2076,6 +2439,9 @@ test('floating renderer shows manual handoff tab, badge count, wait timer, and a
     },
     onManualState(callback) {
       listeners.set('manual-state', callback);
+    },
+    onProtocolMessage(callback) {
+      listeners.set('protocol-message', callback);
     }
   };
 
@@ -2128,31 +2494,136 @@ test('floating renderer shows manual handoff tab, badge count, wait timer, and a
       timestamp: 1719190120000
     }
   });
+  listeners.get('message')({
+    message: {
+      conversationId: 'buyer-reship',
+      senderName: '补寄买家',
+      direction: 'user',
+      kind: 'source_context',
+      messageType: 'reshipment_card',
+      card: {
+        type: 'reshipment',
+        event_text: '消费者已同意商家发起补寄申请',
+        application_reason: '协商一致申请补寄'
+      },
+      timestamp: 1719190130000
+    }
+  });
+  listeners.get('message')({
+    message: {
+      conversationId: 'buyer-address',
+      senderName: '改址买家',
+      direction: 'user',
+      kind: 'local_action',
+      messageType: 'address_change_card',
+      card: {
+        type: 'address_change',
+        address: { full: '江苏省无锡市新吴区' }
+      },
+      timestamp: 1719190140000
+    }
+  });
+  listeners.get('message')({
+    message: {
+      conversationId: 'buyer-refund',
+      senderName: '售后买家',
+      direction: 'user',
+      kind: 'source_context',
+      messageType: 'refund_card',
+      card: {
+        type: 'refund',
+        event_text: '退款工单请立即跟进',
+        application_reason: '退款处理'
+      },
+      timestamp: 1719190150000
+    }
+  });
 
   assert.match(nodes.pluginPlatform.textContent, /拼多多/);
   assert.match(nodes.pluginConnection.textContent, /运行中/);
-  assert.equal(nodes.pluginPending.textContent, '1');
+  assert.equal(nodes.pluginPending.textContent, '--');
   assert.equal(nodes.pluginSent.textContent, '1');
+  assert.equal(nodes.pluginTicketReshipmentBadge.textContent, '1');
+  assert.equal(nodes.pluginTicketAddressBadge.textContent, '1');
+  assert.equal(nodes.pluginTicketAfterSaleBadge.textContent, '1');
   assert.match(nodes.pluginAutoReply.textContent, /AI/);
   assert.match(nodes.pluginManualBadge.textContent, /1/);
-  assert.match(nodes.pluginMessages.children[0].textContent, /买家乙/);
-  assert.match(nodes.pluginSelection.textContent, /买家乙/);
+  assert.match(nodes.pluginManualMessages.children[0].textContent, /买家乙/);
+  assert.equal(nodes.pluginPendingHumanBadge.textContent, '0');
+  assert.match(nodes.pluginManualListAction.className, /\bactive\b/);
+  assert.match(nodes.pluginPendingMessages.className, /\bhidden\b/);
+  assert.match(nodes.pluginPendingMessages.children[0].textContent, /暂无待人工回复/);
+  assert.match(nodes.pluginSelection.textContent, /未选中/);
+  assert.match(nodes.pluginCurrentConversation.children[0].textContent, /未选中会话/);
+  assert.equal(listeners.has('bridge-diagnostic'), false);
 
-  await listeners.get(nodes.pluginTabManual).get('click')();
-  assert.match(nodes.pluginMessages.children[0].textContent, /待人工/);
-  assert.match(nodes.pluginMessages.children[0].textContent, /等待/);
+  await listeners.get(nodes.pluginTicketTab).get('click')();
+  assert.match(nodes.pluginTicketTab.className, /\bactive\b/);
+  assert.match(nodes.pluginAssistantPanel.className, /\bhidden\b/);
+  assert.doesNotMatch(nodes.pluginTicketPanel.className, /\bhidden\b/);
+  assert.match(nodes.pluginTicketMessages.children[0].textContent, /补寄买家/);
+  assert.match(nodes.pluginTicketMessages.children[0].textContent, /确认/);
 
-  await listeners.get(nodes.pluginMessages.children[0]).get('click')();
+  await listeners.get(nodes.pluginTicketMessages.children[0].children[1]).get('click')();
+  assert.equal(nodes.pluginTicketReshipmentBadge.textContent, '0');
+  assert.match(nodes.pluginTicketMessages.children[0].textContent, /暂无补寄会话/);
+
+  await listeners.get(nodes.pluginTicketAddressAction).get('click')();
+  assert.match(nodes.pluginTicketAddressAction.className, /\bactive\b/);
+  assert.match(nodes.pluginTicketMessages.children[0].textContent, /改址买家/);
+
+  await listeners.get(nodes.pluginTicketAfterSaleAction).get('click')();
+  assert.match(nodes.pluginTicketMessages.children[0].textContent, /售后买家/);
+  await listeners.get(nodes.pluginTicketMessages.children[0]).get('click')();
   assert.equal(calls[0][0], 'focusConversation');
-  assert.equal(calls[0][1].conversationId, 'buyer-2');
-  assert.equal(calls[0][1].customerName, '买家乙');
-  assert.equal(calls[0][1].platform, 'pdd');
+  assert.equal(calls[0][1].conversationId, 'buyer-refund');
+  assert.equal(calls[0][1].customerName, '售后买家');
+  assert.match(nodes.pluginSelection.textContent, /售后买家/);
+  assert.match(nodes.pluginCurrentConversation.children[0].children[0].textContent, /售后买家/);
 
   await listeners.get(nodes.pluginManualAction).get('click')();
-  assert.equal(calls[1][0], 'resumeConversation');
-  assert.equal(calls[1][1].conversationId, 'buyer-2');
-  assert.equal(calls[1][1].platform, 'pdd');
-  assert.equal(nodes.pluginManualBadge.textContent, '0');
+  assert.equal(calls[1][0], 'markManualConversation');
+  assert.equal(calls[1][1].conversationId, 'buyer-refund');
+  assert.equal(calls[1][1].reason, 'manual_takeover');
+
+  await listeners.get(nodes.pluginAssistantTab).get('click')();
+  assert.doesNotMatch(nodes.pluginAssistantPanel.className, /\bhidden\b/);
+
+  await listeners.get(nodes.pluginCurrentConversation).get('click')();
+  assert.equal(calls[2][0], 'getCurrentPddConv');
+  assert.equal(Object.keys(calls[2][1]).length, 0);
+  listeners.get('protocol-message')({
+    protocol: {
+      type: 'currentconv',
+      payload: { nick: '买家丁', ccode: 'buyer-4' }
+    }
+  });
+  assert.match(nodes.pluginSelection.textContent, /买家丁/);
+  assert.match(nodes.pluginCurrentConversation.children[0].children[0].textContent, /买家丁/);
+
+  await listeners.get(nodes.pluginManualAction).get('click')();
+  assert.equal(calls[3][0], 'markManualConversation');
+  assert.equal(calls[3][1].conversationId, 'buyer-4');
+  assert.equal(calls[3][1].reason, 'manual_takeover');
+  assert.equal(nodes.pluginManualBadge.textContent, '3');
+
+  assert.match(nodes.pluginManualMessages.children[0].textContent, /临时接管/);
+  assert.match(nodes.pluginManualMessages.children[0].textContent, /等待/);
+
+  const buyerTwoCard = nodes.pluginManualMessages.children.find((child) => /买家乙/.test(child.textContent));
+  await listeners.get(buyerTwoCard).get('click')();
+  assert.equal(calls[4][0], 'focusConversation');
+  assert.equal(calls[4][1].conversationId, 'buyer-2');
+  assert.equal(calls[4][1].customerName, '买家乙');
+  assert.equal(calls[4][1].platform, 'pdd');
+  assert.match(nodes.pluginSelection.textContent, /买家乙/);
+  assert.match(nodes.pluginCurrentConversation.children[0].children[0].textContent, /买家乙/);
+
+  await listeners.get(nodes.pluginManualAction).get('click')();
+  assert.equal(calls[5][0], 'resumeConversation');
+  assert.equal(calls[5][1].conversationId, 'buyer-2');
+  assert.equal(calls[5][1].platform, 'pdd');
+  assert.equal(nodes.pluginManualBadge.textContent, '2');
 
   listeners.get('message')({
     message: {
@@ -2165,10 +2636,26 @@ test('floating renderer shows manual handoff tab, badge count, wait timer, and a
     }
   });
 
-  await listeners.get(nodes.pluginTabPending).get('click')();
+  listeners.get('manual-state')({
+    manual: [{
+      conversationId: 'buyer-3',
+      customerName: '买家丙',
+      platform: 'pdd',
+      reason: '客户要求人工',
+      pendingSince: 1719190180000,
+      lastBuyerAt: 1719190180000
+    }]
+  });
+  assert.equal(nodes.pluginPending.textContent, '1');
+  assert.equal(nodes.pluginPendingHumanBadge.textContent, '1');
+  await listeners.get(nodes.pluginPendingListAction).get('click')();
+  assert.match(nodes.pluginPendingListAction.className, /\bactive\b/);
+  assert.match(nodes.pluginManualMessages.className, /\bhidden\b/);
+  assert.doesNotMatch(nodes.pluginPendingMessages.className, /\bhidden\b/);
+  assert.match(nodes.pluginPendingMessages.children[0].textContent, /待人工回复/);
   await listeners.get(nodes.pluginPendingAction).get('click')();
 
   assert.match(nodes.pluginSelection.textContent, /买家丙/);
-  assert.match(nodes.pluginModeHint.textContent, /AI 托管中/);
-  assert.match(nodes.pluginMessages.children[0].textContent, /待回复/);
+  assert.match(nodes.pluginModeHint.textContent, /人工接管中/);
+  assert.match(nodes.pluginPendingMessages.children[0].textContent, /待人工回复/);
 });
